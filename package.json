@@ -1,0 +1,40 @@
+{
+  "name": "trip-planner-mvp",
+  "version": "1.0.0",
+  "description": "旅行工程ジェネレーター（MVP） - 東京発・王道・複数人向けの旅行プランをAIが70%完成度で提案",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "postcode:convert": "node scripts/kenall_to_postcodes.mjs",
+    "station:convert": "node scripts/geojson_to_stations.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/line-clamp": "^0.4.4",
+    "cheerio": "^1.2.0",
+    "date-fns": "^4.1.0",
+    "iconv-lite": "^0.6.3",
+    "next": "^16.1.6",
+    "react": "18.3.1",
+    "react-day-picker": "^9.13.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.24",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

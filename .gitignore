@@ -37,6 +37,6 @@ test.html
 *.bak
 
 # Data files
-data/
-*.csv
-*.json
+# data/
+# *.csv
+# *.json
