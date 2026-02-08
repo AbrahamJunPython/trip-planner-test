@@ -1,0 +1,141 @@
+import { NextRequest } from "next/server";
+
+// Preset templates for common destinations
+const PRESET_TEMPLATES = {
+  "京都": {
+    summary: "古都京都の王道観光コース。清水寺、金閣寺などの定番スポットを効率よく巡ります。",
+    baseItems: {
+      visit: ["清水寺", "金閣寺", "伏見稲荷大社", "嵐山"],
+      food: ["湯豆腐", "京懐石", "抹茶スイーツ"],
+      hotel: ["京都駅周辺ホテル", "祇園エリア旅館"]
+    }
+  },
+  "大阪": {
+    summary: "食い倒れの街大阪を満喫。たこ焼き、お好み焼きなどのグルメと観光を楽しみます。",
+    baseItems: {
+      visit: ["大阪城", "道頓堀", "通天閣", "ユニバーサルスタジオ"],
+      food: ["たこ焼き", "お好み焼き", "串カツ"],
+      hotel: ["梅田エリアホテル", "難波エリアホテル"]
+    }
+  },
+  "東京": {
+    summary: "首都東京の多彩な魅力を体験。伝統とモダンが融合した観光スポットを巡ります。",
+    baseItems: {
+      visit: ["浅草寺", "東京スカイツリー", "明治神宮", "渋谷"],
+      food: ["寿司", "ラーメン", "もんじゃ焼き"],
+      hotel: ["新宿エリアホテル", "銀座エリアホテル"]
+    }
+  }
+};
+
+function detectDestination(input: any): string | null {
+  const destText = typeof input.destination === 'string' ? input.destination : '';
+  const ogpTitles = Array.isArray(input.destination) 
+    ? input.destination.map((d: any) => d.title || '').join(' ')
+    : '';
+  
+  const searchText = (destText + ' ' + ogpTitles).toLowerCase();
+  
+  for (const [key] of Object.entries(PRESET_TEMPLATES)) {
+    if (searchText.includes(key.toLowerCase())) {
+      return key;
+    }
+  }
+  return null;
+}
+
+async function generateWithPreset(input: any, preset: any): Promise<any> {
+  const tripDays = input.tripDays || 1;
+  const stayDays = input.stayDays || 0;
+  
+  // Generate days in parallel
+  const dayPromises = Array.from({ length: tripDays }, async (_, i) => {
+    const dayIndex = i + 1;
+    const isLastDay = dayIndex === tripDays;
+    
+    return {
+      dayIndex,
+      date: null,
+      title: preset.baseItems.visit[i % preset.baseItems.visit.length],
+      budgetPerPerson: dayIndex === 1 ? 8000 : 6000,
+      items: [
+        {
+          kind: "move",
+          title: `${preset.baseItems.visit[i % preset.baseItems.visit.length]}へ電車で移動`,
+          detail: "電車で約30分、混雑時間を避けて移動",
+          durationMin: 30,
+          url: null,
+          time: { start: "09:00", end: "09:30" },
+          budgetPerPerson: 500
+        },
+        {
+          kind: "visit",
+          title: preset.baseItems.visit[i % preset.baseItems.visit.length],
+          detail: "約2時間の観光、写真撮影スポット多数",
+          durationMin: 120,
+          url: null,
+          time: { start: "09:30", end: "11:30" },
+          budgetPerPerson: 1000
+        },
+        {
+          kind: "food",
+          title: `${preset.baseItems.food[i % preset.baseItems.food.length]}で食事`,
+          detail: "地元の名店、予約不要、60分滞在",
+          durationMin: 60,
+          url: null,
+          time: { start: "12:00", end: "13:00" },
+          budgetPerPerson: 2000
+        },
+        ...(!isLastDay ? [{
+          kind: "hotel",
+          title: `${preset.baseItems.hotel[i % preset.baseItems.hotel.length]}に宿泊`,
+          detail: "駅近の便利なホテル、朝食付き",
+          durationMin: null,
+          url: null,
+          time: null,
+          budgetPerPerson: dayIndex === 1 ? 4500 : 2500
+        }] : [])
+      ]
+    };
+  });
+  
+  const days = await Promise.all(dayPromises);
+  const totalBudget = days.reduce((sum, day) => sum + (day.budgetPerPerson || 0), 0);
+  
+  return {
+    tripName: input.tripName || "新しい旅行",
+    tripDays,
+    stayDays,
+    summary: preset.summary,
+    budgetPerPerson: totalBudget,
+    days,
+    warnings: ["飲食店が混雑している場合は、近隣の類似店舗をご利用ください。"]
+  };
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    
+    // Check for preset template
+    const detectedDest = detectDestination(body);
+    if (detectedDest && PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES]) {
+      const preset = PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES];
+      const result = await generateWithPreset(body, preset);
+      
+      return Response.json({ itinerary: result });
+    }
+    
+    // Fallback to regular API
+    const response = await fetch(`${req.nextUrl.origin}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    return response;
+    
+  } catch (error) {
+    return Response.json({ error: "Generation failed" }, { status: 500 });
+  }
+}

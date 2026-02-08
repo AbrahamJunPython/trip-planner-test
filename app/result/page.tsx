@@ -1,0 +1,744 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+
+type Itinerary = {
+  tripName: string;
+  tripDays?: number;
+  stayDays?: number;
+  summary: string;
+  budgetPerPerson?: number;
+  days: Array<{
+    dayIndex: number;
+    date?: string | null;
+    title?: string | null;
+    budgetPerPerson?: number;
+    items: Array<{
+      kind: "move" | "visit" | "food" | "hotel" | "other";
+      title: string;
+      detail?: string | null;
+      durationMin?: number | null;
+      url?: string | null;
+      time?: { start?: string | null; end?: string | null } | null;
+      budgetPerPerson?: number;
+    }>;
+  }>;
+  warnings?: string[];
+  _meta?: any; // stageなどが来ても落ちないように
+};
+
+type FillKind = "visit" | "food" | "hotel" | "move";
+
+type FillRequest = {
+  dayIndex: number;
+  kind: FillKind;
+  areaTitle: string;
+  departLabel: string;
+  outlineTitle: string;
+  prevTitle: string | null;
+  nextTitle: string | null;
+  destinationHint: string;
+  optional: string;
+  previousVisits?: string; // 過去の訪問地履歴
+  tripDays?: number; // 旅行の総日数
+};
+
+function safeString(v: any): string {
+  return typeof v === "string" ? v : "";
+}
+
+function safeNumber(v: any): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function loadPlanInputFromSession(): any | null {
+  try {
+    const raw = sessionStorage.getItem("trip_form_data"); // ★ plan側保存キー
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function buildHintsFromPlanInput(planInput: any | null) {
+  const departMode = planInput?.departMode; // "postal" | "station" 等
+  const departSelected = planInput?.departSelected;
+
+  const departLabel =
+    departMode === "station"
+      ? `最寄駅:${departSelected ?? ""}`
+      : departMode === "postal"
+      ? `郵便番号:${departSelected ?? ""}`
+      : `出発地:${departSelected ?? ""}`;
+
+  const destinationText = typeof planInput?.destinationText === "string" ? planInput.destinationText : "";
+  const ogpUrls = Array.isArray(planInput?.ogpUrls) ? planInput.ogpUrls : [];
+
+  const destinationHint = [
+    destinationText ? `TEXT:${destinationText}` : "",
+    ogpUrls.length ? `URLS:\n${ogpUrls.slice(0, 8).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const optionalLines: string[] = [];
+  if (planInput?.people) optionalLines.push(`people=${planInput.people}`);
+  if (planInput?.companion) optionalLines.push(`companion=${planInput.companion}`);
+  if (planInput?.budget) optionalLines.push(`budget=${planInput.budget}`);
+  if (planInput?.gender) optionalLines.push(`gender=${planInput.gender}`);
+  if (planInput?.age) optionalLines.push(`age=${planInput.age}`);
+
+  return {
+    departLabel: departLabel || "出発地",
+    destinationHint: destinationHint || "",
+    optional: optionalLines.length ? optionalLines.join("\n") : "none",
+  };
+}
+
+async function callFill(req: FillRequest) {
+  const r = await fetch("/api/fill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    throw new Error(j?.error || `fill failed: ${r.status}`);
+  }
+  return j?.item as Itinerary["days"][number]["items"][number];
+}
+
+function getFillTargetsForDay(day: Itinerary["days"][number]) {
+  const targets: Array<{ idx: number; kind: FillKind }> = [];
+  day.items.forEach((it, idx) => {
+    // ★ Day1の見栄え改善を最速でやるなら、この3つだけで十分
+    if (it.kind === "visit" || it.kind === "food" || it.kind === "hotel") {
+      targets.push({ idx, kind: it.kind });
+    }
+
+    // moveまで埋めたい場合はここを追加
+    // if (it.kind === "move") targets.push({ idx, kind: "move" });
+  });
+  return targets;
+}
+
+function computeDayBudget(day: Itinerary["days"][number]) {
+  return day.items.reduce((s, x) => s + (safeNumber(x.budgetPerPerson) ?? 0), 0);
+}
+
+function computeTripBudget(it: Itinerary) {
+  return it.days.reduce((s, d) => s + (safeNumber(d.budgetPerPerson) ?? computeDayBudget(d)), 0);
+}
+
+export default function ResultPage() {
+  const router = useRouter();
+
+  const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [isEditingTripName, setIsEditingTripName] = useState(false);
+  const [editedTripName, setEditedTripName] = useState("");
+
+  // ★ Day1 fill状態
+  const [isFillingDay1, setIsFillingDay1] = useState(false);
+  const [fillErrors, setFillErrors] = useState<string[]>([]);
+
+  // ★ 何度もDay1 fillが走らないようにする
+  const day1FillStartedRef = useRef(false);
+
+  const header = useMemo(() => {
+    if (!itinerary) return null;
+    const totalDays = itinerary.days?.length ?? 0;
+    const start = itinerary.days?.[0]?.date ?? null;
+    const end = itinerary.days?.[itinerary.days.length - 1]?.date ?? null;
+    return { totalDays, start, end };
+  }, [itinerary]);
+
+  const normalizeFilledTitle = (
+    kind: "move" | "visit" | "food" | "hotel",
+    filledTitle: string | undefined,
+    areaTitle: string,
+    prevTitle: string | null,
+    nextTitle: string | null
+    ) => {
+    const t = (filledTitle ?? "").trim();
+      if (t) return t;
+        // フォールバック（空だったら強制でそれっぽい表記にする）
+        if (kind === "food") return `食事（${areaTitle}）`;
+        if (kind === "hotel") return `宿泊（${areaTitle}）`;
+        if (kind === "visit") return `観光（${areaTitle}）`;
+        // move
+        const a = (prevTitle ?? areaTitle).trim();
+        const b = (nextTitle ?? areaTitle).trim();
+        return `${a}→${b}（移動）`;
+    };
+
+  async function fillOneDaySequential(dayIndex: number, baseSnapshot: Itinerary) {
+    const day = baseSnapshot.days.find((d) => d.dayIndex === dayIndex);
+    if (!day) return;
+
+    const planInput = loadPlanInputFromSession();
+    const hints = buildHintsFromPlanInput(planInput);
+
+    const visitTitle = day.items.find((x) => x.kind === "visit")?.title ?? "";
+    const areaTitle = (visitTitle || safeString(day.title) || "周辺エリア").trim();
+
+    // 過去の訪問地履歴を収集
+    const previousVisits = baseSnapshot.days
+      .filter(d => d.dayIndex < dayIndex)
+      .flatMap(d => d.items.filter(it => it.kind === "visit" || it.kind === "food"))
+      .map(it => it.title)
+      .filter(Boolean)
+      .join(", ");
+
+    // ★ 予算確定が目的なら、まずはこの3つでOK（moveまで埋めたければ後で追加）
+    const orderedKinds: FillKind[] = ["visit", "food", "hotel", "move"];
+
+    for (const kind of orderedKinds) {
+      const idx = day.items.findIndex((it) => it.kind === kind);
+      if (idx < 0) continue;
+
+      const prevTitle = idx > 0 ? day.items[idx - 1]?.title ?? null : null;
+      const nextTitle = idx < day.items.length - 1 ? day.items[idx + 1]?.title ?? null : null;
+
+      const req: FillRequest = {
+        dayIndex,
+        kind,
+        areaTitle,
+        departLabel: hints.departLabel,
+        outlineTitle: day.items[idx]?.title ?? "",
+        prevTitle,
+        nextTitle,
+        destinationHint: hints.destinationHint,
+        optional: hints.optional,
+        previousVisits: previousVisits || undefined,
+        tripDays: baseSnapshot.days.length,
+      };
+
+      try {
+        const filled = await callFill(req);
+
+        // ★ 返ってきた都度、予算を再計算して保存
+        setItinerary((prev) => {
+          if (!prev) return prev;
+
+          const copy: Itinerary = JSON.parse(JSON.stringify(prev));
+          const d = copy.days.find((x) => x.dayIndex === dayIndex);
+          if (!d) return prev;
+
+          const cur = d.items[idx];
+          if (!cur) return prev;
+
+          const prevTitle2 = idx > 0 ? d.items[idx - 1]?.title ?? null : null;
+          const nextTitle2 = idx < d.items.length - 1 ? d.items[idx + 1]?.title ?? null : null;
+
+          d.items[idx] = {
+            ...cur,
+            ...filled,
+            kind: cur.kind,
+            title: normalizeFilledTitle(cur.kind as "move" | "visit" | "food" | "hotel", filled?.title, areaTitle, prevTitle2, nextTitle2),
+          };
+
+          // visit が埋まった瞬間に Dayタイトルもリッチ化
+          if (cur.kind === "visit" && (!d.title || d.title.trim() === "")) {
+            d.title = d.items[idx].title;
+          }
+
+          // 予算を更新
+          d.budgetPerPerson = computeDayBudget(d);
+          copy.budgetPerPerson = computeTripBudget(copy);
+
+          return copy;
+        });
+      } catch (e: any) {
+        setFillErrors((prev) => [...prev, `Day${dayIndex} ${kind}の詳細生成に失敗: ${e?.message ?? "unknown"}`]);
+      }
+    }
+  }
+
+  const [fillStage, setFillStage] = useState<{ running: boolean; currentDay: number | null }>({
+    running: false,
+    currentDay: null,
+  });  
+
+  async function fillAllDaysSequentially(initial: Itinerary) {
+    if (!initial?.days?.length) return;
+
+    setFillStage({ running: true, currentDay: 1 });
+
+    // Day1 → Day2 → ... の順で順次
+    for (let dayIndex = 1; dayIndex <= initial.days.length; dayIndex++) {
+      setFillStage({ running: true, currentDay: dayIndex });
+
+      // その時点の itinerary で次の day の areaTitle 等が変わるので、
+      // “最新の state” を使いたいが、setStateは非同期なので簡易に snapshot を取り直す
+      // → ここでは sessionStorage/URL の initial を基準にしつつ、最低限埋める
+      await fillOneDaySequential(dayIndex, initial);
+    }
+
+    setFillStage({ running: false, currentDay: null });
+  }
+
+    // outline受領 → 即描画 → Day1だけ並列fill
+    const fillDay1Incrementally = async (base: Itinerary) => {
+      if (day1FillStartedRef.current) return;
+      day1FillStartedRef.current = true;
+
+      const dayIndex = 1;
+      const day = base.days.find((d) => d.dayIndex === dayIndex);
+      if (!day) return;
+
+      setIsFillingDay1(true);
+      setFillErrors([]);
+
+      const planInput = loadPlanInputFromSession();
+      const hints = buildHintsFromPlanInput(planInput);
+
+      // areaTitle は Day1 visit.title を最優先
+      const visitTitle = day.items.find((x) => x.kind === "visit")?.title ?? "";
+      const areaTitle = (visitTitle || safeString(day.title) || "周辺エリア").trim();
+
+      const orderedKinds: FillKind[] = ["visit", "food", "hotel", "move"]; // Day1はこの順で必ず
+
+      const targets: Array<{ idx: number; kind: FillKind }> = [];
+      for (const k of orderedKinds) {
+        const idx = day.items.findIndex((it) => it.kind === k);
+        if (idx >= 0) targets.push({ idx, kind: k });
+      }
+
+    const tasks = targets.map(({ idx, kind }) => {
+      const prevTitle = idx > 0 ? day.items[idx - 1]?.title ?? null : null;
+      const nextTitle = idx < day.items.length - 1 ? day.items[idx + 1]?.title ?? null : null;
+
+      const req: FillRequest = {
+        dayIndex,
+        kind,
+        areaTitle,
+        departLabel: hints.departLabel,
+        outlineTitle: day.items[idx]?.title ?? "",
+        prevTitle,
+        nextTitle,
+        destinationHint: hints.destinationHint,
+        optional: hints.optional,
+        previousVisits: undefined, // Day1は過去の訪問地なし
+        tripDays: base.days.length,
+      };  
+
+      return (async () => {
+        const filled = await callFill(req);
+        // 返ってきた順に差し替え（race回避のため関数型更新）
+        setItinerary((prev) => {
+          if (!prev) return prev;
+
+          // deep copy（素直にJSON方式。軽くするなら structuredClone でもOK）
+          const copy: Itinerary = JSON.parse(JSON.stringify(prev));
+          const d = copy.days.find((x) => x.dayIndex === dayIndex);
+          if (!d) return prev;
+
+          const cur = d.items[idx];
+          if (!cur) return prev;
+
+          const prevTitle2 = idx > 0 ? d.items[idx - 1]?.title ?? null : null;
+          const nextTitle2 = idx < d.items.length - 1 ? d.items[idx + 1]?.title ?? null : null;
+
+          d.items[idx] = {
+            ...cur,
+            ...filled,
+            kind: cur.kind,
+            title: normalizeFilledTitle(cur.kind as "move" | "visit" | "food" | "hotel", filled?.title, areaTitle, prevTitle2, nextTitle2),
+          };
+
+          // ★ visitが入った瞬間にDayタイトルも更新（見栄えUP）
+          if (cur.kind === "visit" && (!d.title || d.title.trim() === "")) {
+            d.title = d.items[idx].title;
+          }
+
+          d.budgetPerPerson = computeDayBudget(d);
+          copy.budgetPerPerson = computeTripBudget(copy);
+
+          return copy;
+        });
+      })().catch((e) => {
+        setFillErrors((prev) => [...prev, `${kind}の詳細生成に失敗: ${e?.message ?? "unknown"}`]);
+      });
+    });
+
+    for (const { idx, kind } of targets) {
+      const prevTitle = idx > 0 ? day.items[idx - 1]?.title ?? null : null;
+      const nextTitle = idx < day.items.length - 1 ? day.items[idx + 1]?.title ?? null : null;
+
+      const req: FillRequest = {
+        dayIndex,
+        kind,
+        areaTitle,
+        departLabel: hints.departLabel,
+        outlineTitle: day.items[idx]?.title ?? "",
+        prevTitle,
+        nextTitle,
+        destinationHint: hints.destinationHint,
+        optional: hints.optional,
+        previousVisits: undefined, // Day1は過去の訪問地なし
+        tripDays: base.days.length,
+      };
+
+      try {
+        const filled = await callFill(req);
+
+        setItinerary((prev) => {
+          if (!prev) return prev;
+          const copy: Itinerary = JSON.parse(JSON.stringify(prev));
+          const d = copy.days.find((x) => x.dayIndex === dayIndex);
+          if (!d) return prev;
+
+          const cur = d.items[idx];
+          if (!cur) return prev;
+
+          const prevTitle2 = idx > 0 ? d.items[idx - 1]?.title ?? null : null;
+          const nextTitle2 = idx < d.items.length - 1 ? d.items[idx + 1]?.title ?? null : null;
+
+          d.items[idx] = {
+            ...cur,
+            ...filled,
+            kind: cur.kind,
+            title: normalizeFilledTitle(cur.kind as "move" | "visit" | "food" | "hotel", filled?.title, areaTitle, prevTitle2, nextTitle2),
+          };
+
+          // ★ visit が埋まった瞬間に Dayタイトルもリッチ化
+          if (cur.kind === "visit" && (!d.title || d.title.trim() === "")) {
+            d.title = d.items[idx].title;
+          }
+
+          d.budgetPerPerson = computeDayBudget(d);
+          copy.budgetPerPerson = computeTripBudget(copy);
+          return copy;
+        });
+      } catch (e: any) {
+        setFillErrors((prev) => [...prev, `${kind}の詳細生成に失敗: ${e?.message ?? "unknown"}`]);
+      }
+    }
+
+    setIsFillingDay1(false);
+  };
+
+  /* =====================
+   * Load itinerary (shared URL or sessionStorage)
+   * then immediately start Day1 fill
+   ===================== */
+  useEffect(() => {
+    // 1) shared data in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedData = urlParams.get("data");
+
+    if (sharedData) {
+      try {
+        const decoded = atob(decodeURIComponent(sharedData));
+        const parsed = JSON.parse(decoded);
+        if (parsed?.days && Array.isArray(parsed.days)) {
+          setItinerary(parsed as Itinerary);
+
+          // ★ outline描画の次にDay1 fill（非同期で）
+          queueMicrotask(() => {
+            fillAllDaysSequentially(parsed as Itinerary);
+          });
+          return;
+        }
+      } catch {
+        // ignore and fall back
+      }
+    }
+
+    // 2) sessionStorage
+    const raw = sessionStorage.getItem("trip_result_json");
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed?.days || !Array.isArray(parsed.days)) return;
+
+      setItinerary(parsed as Itinerary);
+
+      // ★ outline描画の次にDay1 fill（非同期で）
+      queueMicrotask(() => {
+        fillAllDaysSequentially(parsed as Itinerary);
+      });
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!itinerary) {
+    return (
+      <main className="min-h-screen bg-white px-4">
+        <div className="max-w-[820px] mx-auto py-10">
+          <div className="py-6 flex justify-center">
+            <Image src="/cocoico-ai.png" alt="cocoico" width={200} height={200} priority />
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-gray-600">結果がありません。先にプランを生成してください。</p>
+
+            <button
+              type="button"
+              onClick={() => router.push("/plan")}
+              className="mt-4 w-full rounded-2xl bg-emerald-500 text-white py-3 font-bold"
+            >
+              プラン入力に戻る
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-white px-4">
+      <div className="max-w-[820px] mx-auto pb-14">
+        {/* header */}
+        <div className="flex items-start justify-between gap-3 pt-6">
+          <div className="min-w-0">
+            {isEditingTripName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={editedTripName}
+                  onChange={(e) => setEditedTripName(e.target.value)}
+                  className="text-xl font-extrabold bg-transparent border-b-2 border-emerald-500 outline-none"
+                  autoFocus
+                  onBlur={() => {
+                    if (editedTripName.trim()) {
+                      setItinerary(prev => prev ? {...prev, tripName: editedTripName.trim()} : prev);
+                    }
+                    setIsEditingTripName(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (editedTripName.trim()) {
+                        setItinerary(prev => prev ? {...prev, tripName: editedTripName.trim()} : prev);
+                      }
+                      setIsEditingTripName(false);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <h1 
+                className="text-xl font-extrabold truncate cursor-pointer hover:text-emerald-600 transition-colors"
+                onClick={() => {
+                  setEditedTripName(itinerary?.tripName || "旅行プラン");
+                  setIsEditingTripName(true);
+                }}
+                title="クリックして編集"
+              >
+                {itinerary.tripName || "旅行プラン"}
+              </h1>
+            )}
+
+            {header?.totalDays ? (
+              <div className="mt-1 text-xs text-gray-500">
+                {itinerary.tripDays && itinerary.stayDays !== undefined
+                  ? itinerary.tripDays === 1
+                    ? "日帰り"
+                    : `${itinerary.stayDays}泊${itinerary.tripDays}日`
+                  : `${header.totalDays}日間`}
+                {header.start ? ` / ${header.start}` : ""}
+                {header.end && header.end !== header.start ? ` 〜 ${header.end}` : ""}
+              </div>
+            ) : null}
+
+            {itinerary.budgetPerPerson ? (
+              <div className="mt-2 inline-block rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-800">
+                予算：¥{itinerary.budgetPerPerson.toLocaleString()}/人
+              </div>
+            ) : null}
+          </div>
+
+          <button type="button" onClick={() => router.push("/plan")} className="shrink-0 hover:opacity-80 transition-opacity">
+            <Image src="/cocoico-ai_logo.png" alt="入力に戻る" width={60} height={60} priority />
+          </button>
+        </div>
+
+        {itinerary.summary ? <p className="text-sm text-gray-600 mt-3 leading-relaxed">{itinerary.summary}</p> : null}
+
+        {/* Day1 fill banner */}
+        {isFillingDay1 ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            1日目の詳細を確定中…（店名・観光名・宿を埋めています）
+          </div>
+        ) : null}
+
+        {fillErrors.length ? (
+          <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="font-extrabold">一部の詳細生成に失敗しました</div>
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              {fillErrors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {/* warnings */}
+        {itinerary.warnings?.length ? (
+          <div className="mt-5 rounded-2xl border border-yellow-200 bg-yellow-50 p-3 text-sm">
+            <div className="font-extrabold text-yellow-800">注意</div>
+            <ul className="list-disc pl-5 text-yellow-800 mt-1 space-y-0.5">
+              {itinerary.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {fillStage.running ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            詳細を確定中…（Day{fillStage.currentDay} を更新しています）
+          </div>
+        ) : null}
+
+        {/* days */}
+        <div className="mt-6 space-y-4">
+          {itinerary.days.map((d) => (
+            <div key={d.dayIndex} className="rounded-2xl bg-white border-l-2 border-emerald-500 p-1">
+              {/* Day Header */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                    {d.dayIndex}
+                  </div>
+                  {d.title ? <div className="text-sm font-bold text-gray-700">{d.title}</div> : null}
+                  {d.date ? <div className="text-xs text-gray-500">{d.date}</div> : null}
+                </div>
+                {d.budgetPerPerson ? (
+                  <div className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-800">
+                    ¥{d.budgetPerPerson.toLocaleString()}/人
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Items */}
+              <div className="space-y-0.5">
+                {d.items
+                  .filter((it) => !(it.kind === "move" && it.durationMin && it.durationMin <= 60))
+                  .map((it, idx) => (
+                    <div key={idx} className="rounded-lg bg-gray-50 p-1.5">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="shrink-0 mt-0.5 cursor-pointer hover:scale-110 transition-transform"
+                          onClick={() => {
+                            if (it.detail) {
+                              const itemId = `${d.dayIndex}-${idx}`;
+                              setExpandedItems((prev) => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(itemId)) newSet.delete(itemId);
+                                else newSet.add(itemId);
+                                return newSet;
+                              });
+                            }
+                          }}
+                        >
+                          <span className="text-lg">{iconFor(it.kind)}</span>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-gray-900 break-words">{it.title}</div>
+                            </div>
+
+                            <div className="shrink-0 flex items-center gap-2">
+                              {it.budgetPerPerson ? (
+                                <div className="text-sm font-bold text-emerald-600">
+                                  ¥{it.budgetPerPerson.toLocaleString()}
+                                </div>
+                              ) : null}
+
+                              <div className="flex gap-1">
+                                {it.url ? (
+                                  <a
+                                    href={it.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-6 h-6 flex items-center justify-center text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                    title="公式URLを開く"
+                                  >
+                                    🔗
+                                  </a>
+                                ) : null}
+
+                                {((it.kind === "food" || it.kind === "hotel") ||
+                                  (it.budgetPerPerson && it.budgetPerPerson >= 5000)) ? (
+                                  <button
+                                    onClick={() => {
+                                      const query = encodeURIComponent(`${it.title} 予約`);
+                                      window.open(`https://www.google.com/search?q=${query}`, "_blank");
+                                    }}
+                                    className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200 font-medium"
+                                  >
+                                    予約
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+
+                          {it.detail && expandedItems.has(`${d.dayIndex}-${idx}`) ? (
+                            <div className="mt-2 text-xs text-gray-600 leading-relaxed">{it.detail}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* bottom actions */}
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                const shareData = btoa(JSON.stringify(itinerary));
+                const shareUrl = `${window.location.origin}/result?data=${encodeURIComponent(shareData)}`;
+                navigator.clipboard.writeText(shareUrl);
+                alert("共有用URLをコピーしました");
+              } catch {
+                alert("コピーに失敗しました");
+              }
+            }}
+            className="w-full rounded-2xl border border-gray-200 bg-white py-4 font-extrabold text-gray-800 hover:bg-gray-50"
+          >
+            共有用URLをコピー
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push("/plan")}
+            className="mt-3 w-full rounded-2xl bg-emerald-500 text-white py-4 font-extrabold hover:bg-emerald-600"
+          >
+            条件を変えて作り直す
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function iconFor(kind: Itinerary["days"][number]["items"][number]["kind"]) {
+  switch (kind) {
+    case "move":
+      return "🚃";
+    case "visit":
+      return "📍";
+    case "food":
+      return "🍜";
+    case "hotel":
+      return "🛏️";
+    default:
+      return "🗂️";
+  }
+}
