@@ -21,7 +21,6 @@ out/
 
 # Vercel
 .vercel
-vercel.json
 
 # IDE
 .vscode/
