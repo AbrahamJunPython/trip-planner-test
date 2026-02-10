@@ -160,7 +160,7 @@ export default function Home() {
               console.error('Navigation error:', error)
             }
           }}
-          className="inline-flex items-center justify-center px-32 py-4 rounded-full font-semibold shadow-md transition outline-none border-0 text-[15px] bg-emerald-500 text-white cursor-pointer active:scale-[0.98]"
+          className="inline-flex items-center justify-center px-32 py-4 rounded-full font-semibold shadow-md transition outline-none border-0 text-[10px] bg-emerald-500 text-white cursor-pointer active:scale-[0.98]"
         >
           はじめる
         </button>

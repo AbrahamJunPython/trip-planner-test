@@ -2,3 +2,29 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* DayPicker スマホ対応 */
+.rdp {
+  --rdp-cell-size: 40px;
+  --rdp-accent-color: #10b981;
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .rdp {
+    --rdp-cell-size: 36px;
+    font-size: 13px;
+  }
+  
+  .rdp-months {
+    justify-content: center;
+  }
+  
+  .rdp-month {
+    width: 100%;
+  }
+  
+  .rdp-table {
+    max-width: 100%;
+  }
+}
