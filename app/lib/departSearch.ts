@@ -14,7 +14,7 @@ export function searchDepartCandidates(
     return stations
       .filter((s) => 
         s.name.toLowerCase().includes(normalized) ||
-        (s.kana && s.kana.toLowerCase().includes(normalized))
+        s.searchKey.toLowerCase().includes(normalized)
       )
       .slice(0, 10)
       .map((s) => s.name);
