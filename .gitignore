@@ -10,13 +10,18 @@ out/
 
 # Environment variables
 .env
+.env.*
+!.env.local.template
+!.env.local.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # Vercel
 .vercel
+vercel.json
 
 # IDE
 .vscode/
