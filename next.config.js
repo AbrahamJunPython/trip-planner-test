@@ -2,7 +2,6 @@
 const nextConfig = {
   reactStrictMode: true,
   
-  // Security headers (development用に緩和)
   async headers() {
     return [
       {
@@ -10,9 +9,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: process.env.NODE_ENV === 'development' 
-              ? "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;"
-              : "default-src 'self'; script-src 'self'; object-src 'none'; img-src 'self' data: https:;"
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.openai.com; object-src 'none';"
           },
           {
             key: 'X-Content-Type-Options',
