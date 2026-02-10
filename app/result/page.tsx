@@ -700,14 +700,21 @@ export default function ResultPage() {
         <div className="mt-8">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               try {
-                const shareData = btoa(JSON.stringify(itinerary));
-                const shareUrl = `${window.location.origin}/result?data=${encodeURIComponent(shareData)}`;
-                navigator.clipboard.writeText(shareUrl);
+                const shareData = encodeURIComponent(JSON.stringify(itinerary));
+                const shareUrl = `${window.location.origin}/result?data=${shareData}`;
+                
+                if (shareUrl.length > 2000) {
+                  alert("データが大きすぎるため、共有URLを生成できませんでした");
+                  return;
+                }
+                
+                await navigator.clipboard.writeText(shareUrl);
                 alert("共有用URLをコピーしました");
-              } catch {
-                alert("コピーに失敗しました");
+              } catch (err) {
+                console.error("Copy failed:", err);
+                alert("コピーに失敗しました。ブラウザの設定を確認してください。");
               }
             }}
             className="w-full rounded-2xl border border-gray-200 bg-white py-4 font-extrabold text-gray-800 hover:bg-gray-50"
