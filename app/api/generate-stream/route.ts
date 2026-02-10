@@ -113,29 +113,59 @@ async function generateWithPreset(input: any, preset: any): Promise<any> {
   };
 }
 
+export const runtime = "nodejs";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    
-    // Check for preset template
+
     const detectedDest = detectDestination(body);
     if (detectedDest && PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES]) {
       const preset = PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES];
       const result = await generateWithPreset(body, preset);
-      
-      return Response.json({ itinerary: result });
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const enc = new TextEncoder();
+          // SSEのdata行として返す（クライアントが同じロジックで読める）
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ itinerary: result })}\n\n`));
+          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-store",
+          Connection: "keep-alive",
+        },
+      });
     }
-    
-    // Fallback to regular API
-    const response = await fetch(`${req.nextUrl.origin}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+
+    // fallback（/api/generate がSSEならそのまま中継）
+    const upstream = await fetch(new URL("/api/generate", req.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
-    
-    return response;
-    
-  } catch (error) {
+
+    // upstreamのエラーを握りつぶさない（重要）
+    if (!upstream.ok) {
+      const t = await upstream.text();
+      return new Response(t, { status: upstream.status, headers: { "Content-Type": "application/json" } });
+    }
+
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        "Content-Type": upstream.headers.get("content-type") ?? "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store",
+        Connection: "keep-alive",
+      },
+    });
+  } catch {
     return Response.json({ error: "Generation failed" }, { status: 500 });
   }
 }
