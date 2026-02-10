@@ -434,7 +434,13 @@ export default function ResultPage() {
 
     if (sharedData) {
       try {
-        const decoded = atob(decodeURIComponent(sharedData));
+        // Base64デコード（日本語対応）
+        const decoded = decodeURIComponent(
+          atob(sharedData)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
         const parsed = JSON.parse(decoded);
         if (parsed?.days && Array.isArray(parsed.days)) {
           setItinerary(parsed as Itinerary);
@@ -702,10 +708,25 @@ export default function ResultPage() {
             type="button"
             onClick={async () => {
               try {
-                const shareData = encodeURIComponent(JSON.stringify(itinerary));
-                const shareUrl = `${window.location.origin}/result?data=${shareData}`;
+                // 軽量化: detail フィールドを除外
+                const lightData = {
+                  ...itinerary,
+                  days: itinerary.days.map(d => ({
+                    ...d,
+                    items: d.items.map(it => {
+                      const { detail, ...rest } = it;
+                      return rest;
+                    })
+                  }))
+                };
                 
-                if (shareUrl.length > 2000) {
+                const jsonStr = JSON.stringify(lightData);
+                const compressed = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => 
+                  String.fromCharCode(parseInt(p1, 16))
+                ));
+                const shareUrl = `${window.location.origin}/result?data=${compressed}`;
+                
+                if (shareUrl.length > 8000) {
                   alert("データが大きすぎるため、共有URLを生成できませんでした");
                   return;
                 }
