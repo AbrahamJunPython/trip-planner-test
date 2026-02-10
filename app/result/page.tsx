@@ -428,13 +428,27 @@ export default function ResultPage() {
    * then immediately start Day1 fill
    ===================== */
   useEffect(() => {
-    // 1) shared data in URL
     const urlParams = new URLSearchParams(window.location.search);
+    const shareId = urlParams.get("id");
     const sharedData = urlParams.get("data");
 
+    // 1) ID経由で読み込み
+    if (shareId) {
+      fetch(`/api/share?id=${shareId}`)
+        .then(r => r.json())
+        .then(({ data }) => {
+          if (data?.days && Array.isArray(data.days)) {
+            setItinerary(data as Itinerary);
+            queueMicrotask(() => fillAllDaysSequentially(data as Itinerary));
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 2) 旧形式（dataパラメータ）
     if (sharedData) {
       try {
-        // Base64デコード（日本語対応）
         const decoded = decodeURIComponent(
           atob(sharedData)
             .split('')
@@ -444,35 +458,22 @@ export default function ResultPage() {
         const parsed = JSON.parse(decoded);
         if (parsed?.days && Array.isArray(parsed.days)) {
           setItinerary(parsed as Itinerary);
-
-          // ★ outline描画の次にDay1 fill（非同期で）
-          queueMicrotask(() => {
-            fillAllDaysSequentially(parsed as Itinerary);
-          });
+          queueMicrotask(() => fillAllDaysSequentially(parsed as Itinerary));
           return;
         }
-      } catch {
-        // ignore and fall back
-      }
+      } catch {}
     }
 
-    // 2) sessionStorage
+    // 3) sessionStorage
     const raw = sessionStorage.getItem("trip_result_json");
     if (!raw) return;
 
     try {
       const parsed = JSON.parse(raw);
       if (!parsed?.days || !Array.isArray(parsed.days)) return;
-
       setItinerary(parsed as Itinerary);
-
-      // ★ outline描画の次にDay1 fill（非同期で）
-      queueMicrotask(() => {
-        fillAllDaysSequentially(parsed as Itinerary);
-      });
-    } catch {
-      // ignore
-    }
+      queueMicrotask(() => fillAllDaysSequentially(parsed as Itinerary));
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -708,7 +709,6 @@ export default function ResultPage() {
             type="button"
             onClick={async () => {
               try {
-                // 軽量化: detail フィールドを除外
                 const lightData = {
                   ...itinerary,
                   days: itinerary.days.map(d => ({
@@ -720,22 +720,20 @@ export default function ResultPage() {
                   }))
                 };
                 
-                const jsonStr = JSON.stringify(lightData);
-                const compressed = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => 
-                  String.fromCharCode(parseInt(p1, 16))
-                ));
-                const shareUrl = `${window.location.origin}/result?data=${compressed}`;
+                const res = await fetch("/api/share", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(lightData)
+                });
                 
-                if (shareUrl.length > 8000) {
-                  alert("データが大きすぎるため、共有URLを生成できませんでした");
-                  return;
-                }
+                const { id } = await res.json();
+                const shareUrl = `${window.location.origin}/result?id=${id}`;
                 
                 await navigator.clipboard.writeText(shareUrl);
-                alert("共有用URLをコピーしました");
+                alert("共有用URLをコピーしました（24時間有効）");
               } catch (err) {
-                console.error("Copy failed:", err);
-                alert("コピーに失敗しました。ブラウザの設定を確認してください。");
+                console.error("Share failed:", err);
+                alert("共有URLの生成に失敗しました。");
               }
             }}
             className="w-full rounded-2xl border border-gray-200 bg-white py-4 font-extrabold text-gray-800 hover:bg-gray-50"
