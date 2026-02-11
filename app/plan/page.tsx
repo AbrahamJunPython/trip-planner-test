@@ -98,7 +98,7 @@ export default function PlanPage() {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [range, setRange] = useState<Range | undefined>(undefined);
   const tripDays = null;
-  const startDate = "";
+  const startDate = format(new Date(), "yyyy-MM-dd");
   const endDate = "";
 
   const [people, setPeople] = useState<number | "">("");
@@ -353,7 +353,7 @@ export default function PlanPage() {
               url,
             }))
           : destinationText,
-      startDate: null,
+      startDate: format(new Date(), "yyyy-MM-dd"),
       endDate: null,
       tripDays: calculatedTripDays,
       stayDays: calculatedStayDays,
