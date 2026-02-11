@@ -93,16 +93,13 @@ export default function PlanPage() {
   const [ogpUrls, setOgpUrls] = useState<string[]>([]);
   const [ogpItems, setOgpItems] = useState<Ogp[]>([]);
   const [classifiedPlaces, setClassifiedPlaces] = useState<Array<{url: string; category: string; name: string; address: string}>>([]);
+  const [departCoords, setDepartCoords] = useState<{lat: number; lon: number} | null>(null);
   
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [range, setRange] = useState<Range | undefined>(undefined);
-  const tripDays = range?.from
-      ? range?.to
-      ? differenceInCalendarDays(range.to, range.from) + 1
-      : 1
-      : null;
-  const startDate = range?.from ? format(range.from, "yyyy-MM-dd") : "";
-  const endDate = range?.to ? format(range.to, "yyyy-MM-dd") : "";
+  const tripDays = null;
+  const startDate = "";
+  const endDate = "";
 
   const [people, setPeople] = useState<number | "">("");
   const [companion, setCompanion] = useState<Companion | "">("");
@@ -281,6 +278,7 @@ export default function PlanPage() {
                 const location = `${postal} ${state}${city}`;
                 setDepartMode("postal");
                 setDepartSelected(location);
+                setDepartCoords({ lat: latitude, lon: longitude });
               } else {
                 alert("郵便番号の取得に失敗しました");
               }
@@ -310,7 +308,6 @@ export default function PlanPage() {
    * can generate
    ===================== */
   const canGenerate =
-    startDate &&
     departSelected &&
     (ogpItems.length > 0 || destinationText);
 
@@ -323,11 +320,30 @@ export default function PlanPage() {
     setIsGenerating(true);
     setLoadingPhase("premise");
 
+    // 旅行日数を計算
+    let calculatedTripDays = 1;
+    let calculatedStayDays = 0;
+    
+    try {
+      const calcRes = await fetch("/api/calculate-trip-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departCoords, classifiedPlaces })
+      });
+      const calcData = await calcRes.json();
+      calculatedTripDays = calcData.tripDays || 1;
+      calculatedStayDays = calcData.stayDays || 0;
+    } catch {
+      calculatedTripDays = 1;
+      calculatedStayDays = 0;
+    }
+
     const payload = {
       tripName,
       depart: {
         type: departMode,
-        value: departSelected
+        value: departSelected,
+        coords: departCoords
       },
       destination:
         ogpItems.length > 0
@@ -337,15 +353,16 @@ export default function PlanPage() {
               url,
             }))
           : destinationText,
-      startDate,
-      endDate: endDate || null,
-      tripDays: tripDays || 1,
-      stayDays: tripDays ? tripDays - 1 : 0,
+      startDate: null,
+      endDate: null,
+      tripDays: calculatedTripDays,
+      stayDays: calculatedStayDays,
       people: people || null,
       companion: companion || null,
       budget: budget || null,
       gender: gender || null,
       age: age || null,
+      classifiedPlaces,
     };
 
     try {
@@ -535,66 +552,6 @@ export default function PlanPage() {
                 )}
               </div>
             )}
-          </div>
-
-          {/* =====================
-              日程
-             ===================== */}
-          <div>
-            <span className="text-sm font-bold">日程</span>
-
-            {/* 表示用ボックス（タップで開く） */}
-            <button
-                type="button"
-                onClick={() => setIsCalendarOpen((v) => !v)}
-                className="mt-1 w-full text-left rounded-2xl border border-gray-200 p-3 bg-white hover:bg-gray-50"
-            >
-                {range?.from ? (
-                <div>
-                    <div className="font-bold text-emerald-500">
-                    {range.to
-                        ? `${tripDays === 1 ? "日帰り" : `${tripDays-1}泊${tripDays}日`}`
-                        : "日帰り"}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                    {startDate}
-                    {endDate ? ` 〜 ${endDate}` : ""}
-                    </div>
-                </div>
-                    ) : (
-                    <span className="text-gray-400">日程をカレンダーから選択</span>
-                    )}
-                </button>
-
-                {/* カレンダー（開いた時だけ表示） */}
-                {isCalendarOpen && (
-                <div className="mt-2 rounded-2xl border border-gray-200 p-3 bg-white shadow-sm">
-                    <DayPicker
-                        mode="range"
-                        selected={range}
-                        onSelect={(r) => {
-                        setRange(r);
-                        // from と to の両方があり、かつ異なる日付の場合のみ閉じる
-                        if (r?.from && r?.to && r.from.getTime() !== r.to.getTime()) {
-                          setIsCalendarOpen(false);
-                        }
-                        }}
-                        numberOfMonths={1}
-                        disabled={[
-                          { before: new Date() },
-                          (date) => {
-                            if (!range?.from) return false;
-                            const daysDiff = Math.abs((date.getTime() - range.from.getTime()) / (1000 * 60 * 60 * 24));
-                            return daysDiff >= 7;
-                          }
-                        ]}
-                    />
-
-                    <div className="mt-2 text-xs text-gray-500">
-                        ※ 帰着日は任意（日帰り可）
-                    </div>
-                </div>
-                )}
           </div>
 
           {/* =====================
