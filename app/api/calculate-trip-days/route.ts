@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
     const visitCount = classifiedPlaces.filter((p: any) => p.category === "visit").length;
     const hotelCount = classifiedPlaces.filter((p: any) => p.category === "hotel").length;
     
+    console.log("[calculate-trip-days] visitCount:", visitCount, "hotelCount:", hotelCount);
+    console.log("[calculate-trip-days] classifiedPlaces:", JSON.stringify(classifiedPlaces, null, 2));
+    
     // 距離計算（出発地から最初の目的地まで）
     let maxDistance = 0;
     for (const place of classifiedPlaces) {
@@ -60,6 +63,8 @@ export async function POST(req: NextRequest) {
     tripDays = Math.min(tripDays, 7);
     
     const stayDays = tripDays - 1;
+    
+    console.log("[calculate-trip-days] Final result - tripDays:", tripDays, "stayDays:", stayDays);
 
     return NextResponse.json({ tripDays, stayDays });
   } catch (error) {
