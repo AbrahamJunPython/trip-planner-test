@@ -729,15 +729,42 @@ export default function PlanPage() {
           )}
 
           {/* =====================
-              generate
+              Chat & Generate
              ===================== */}
-          <button
-            onClick={generate}
-            disabled={!canGenerate}
-            className="w-full rounded-2xl bg-orange-400 text-white py-4 font-bold disabled:opacity-40"
-          >
-            ラフプラン生成
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                // Save context before navigating to chat
+                const formData = {
+                  tripName,
+                  destinationText,
+                  ogpUrls,
+                  classifiedPlaces,
+                  departSelected,
+                  departMode,
+                  people,
+                  companion,
+                  budget,
+                  gender,
+                  age,
+                  showDetails
+                };
+                sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
+                router.push("/chat");
+              }}
+              disabled={!departSelected || classifiedPlaces.length === 0}
+              className="w-full rounded-2xl bg-blue-500 text-white py-4 font-bold disabled:opacity-40 hover:bg-blue-600"
+            >
+              💬 AIと相談する
+            </button>
+            <button
+              onClick={generate}
+              disabled={!canGenerate}
+              className="w-full rounded-2xl bg-orange-400 text-white py-4 font-bold disabled:opacity-40"
+            >
+              ラフプラン生成
+            </button>
+          </div>
         </div>
       </div>
     </main>
