@@ -27,7 +27,7 @@ JSON形式で返してください:
 {
   "category": "visit" | "food" | "hotel" | "move",
   "name": "施設名",
-  "address": "住所（都道府県市区町村まで）"
+  "address": "正確な番地までの住所"
 }
 
 カテゴリの判定基準:
