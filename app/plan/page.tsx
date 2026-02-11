@@ -621,7 +621,7 @@ export default function PlanPage() {
             </div>
 
             {ogpItems.length > 0 ? (
-              <div className="mt-2 space-y-2">
+              <div className="mt-1 space-y-1">
                 {classifiedPlaces.map((place) => (
                   <PlaceCard key={place.url} place={place} onRemove={() => removeDestinationUrl(place.url)} />
                 ))}
