@@ -796,7 +796,12 @@ function PlaceCard({ place, onRemove }: { place: {url: string; category: string;
   };
   
   return (
-    <div className="border border-gray-200 rounded-2xl p-3 flex items-center gap-3 bg-white">
+    <a
+      href={place.url}
+      target="_blank"
+      rel="noreferrer"
+      className="border border-gray-200 rounded-2xl p-3 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors relative"
+    >
       <div className="text-2xl">{iconMap[place.category] || "📍"}</div>
       <div className="flex-1 min-w-0">
         <div className="font-bold truncate">{place.name}</div>
@@ -804,22 +809,18 @@ function PlaceCard({ place, onRemove }: { place: {url: string; category: string;
           <div className="text-xs text-gray-500 truncate">{place.address}</div>
         )}
       </div>
-      <a
-        href={place.url}
-        target="_blank"
-        rel="noreferrer"
-        className="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600"
-      >
-        URL
-      </a>
       <button
         type="button"
-        onClick={onRemove}
-        className="text-xl text-red-500 hover:text-red-700 flex-shrink-0 p-1"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="text-xl text-red-500 hover:text-red-700 flex-shrink-0 p-1 z-10"
       >
         ×
       </button>
-    </div>
+    </a>
   );
 }
 
