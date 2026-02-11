@@ -114,6 +114,7 @@ export default function PlanPage() {
   const [departInput, setDepartInput] = useState("");
   const [departSelected, setDepartSelected] = useState<string | null>(null);
   const [departCandidates, setDepartCandidates] = useState<string[]>([]);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<"premise" | "rules" | "format" | "slow">("premise");
 
@@ -215,6 +216,61 @@ export default function PlanPage() {
 
   const handleCancel = () => {
     setIsGenerating(false);
+  };
+
+  /* =====================
+   * 現在地取得
+   ===================== */
+  const getCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      alert("お使いのブラウザは位置情報に対応していません");
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await fetch(
+            `/api/reverse-geocode?lat=${latitude}&lon=${longitude}`
+          );
+          
+          if (res.ok) {
+            const data = await res.json();
+            if (data.address) {
+              const addr = data.address;
+              const postal = addr.postcode || "";
+              const city = addr.city || addr.town || addr.village || "";
+              const state = addr.state || "";
+              
+              if (postal) {
+                const location = `${postal} ${state}${city}`;
+                setDepartMode("postal");
+                setDepartSelected(location);
+              } else {
+                alert("郵便番号の取得に失敗しました");
+              }
+            } else {
+              alert("住所情報の取得に失敗しました");
+            }
+          } else {
+            console.warn("reverse-geocode failed", await res.text());
+            alert("位置情報の取得に失敗しました");
+          }
+        } catch (err) {
+          console.error("Location error:", err);
+          alert("位置情報の取得に失敗しました");
+        } finally {
+          setIsGettingLocation(false);
+        }
+      },
+      (err) => {
+        console.error("Geolocation error:", err);
+        alert("位置情報の取得が拒否されました");
+        setIsGettingLocation(false);
+      }
+    );
   };
 
   /* =====================
@@ -355,6 +411,15 @@ export default function PlanPage() {
              ===================== */}
           <div>
             <span className="text-sm font-bold">出発地</span>
+            {/* 現在地取得ボタン */}
+            <button
+              type="button"
+              onClick={getCurrentLocation}
+              disabled={isGettingLocation}
+              className="mt-2 w-full py-2 px-4 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isGettingLocation ? "取得中..." : "📍 現在地から設定"}
+            </button>
             {/* タブ */}
             <div className="mt-2 flex rounded-2xl border border-gray-200 overflow-hidden">
               <button
@@ -366,7 +431,7 @@ export default function PlanPage() {
                 }}
                 className={`flex-1 py-2 text-sm font-bold ${
                   departMode === "postal"
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-emerald-300 text-white"
                     : "bg-white text-gray-600"
                 }`}
               >
@@ -381,7 +446,7 @@ export default function PlanPage() {
                 }}
                 className={`flex-1 py-2 text-sm font-bold ${
                   departMode === "station"
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-emerald-300 text-white"
                     : "bg-white text-gray-600"
                 }`}
               >
