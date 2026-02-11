@@ -27,7 +27,7 @@ JSON形式で返してください:
 {
   "category": "visit" | "food" | "hotel" | "move",
   "name": "施設名",
-  "address": "正確な番地までの住所"
+  "address": "正確な番地までの住所"、番地までわからない場合は楽天トラベル(https://travel.rakuten.co.jp/)で調査してください。
 }
 
 カテゴリの判定基準:

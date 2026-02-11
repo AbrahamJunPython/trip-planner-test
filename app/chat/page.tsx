@@ -182,25 +182,22 @@ export default function ChatPage() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           {/* Place Card */}
-          <div className="border-2 border-emerald-500 rounded-2xl p-4 bg-emerald-50">
-            <div className="flex items-center gap-3 mb-2">
+          <a
+            href={currentPlace.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block border-2 border-emerald-500 rounded-2xl p-4 bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
               <div className="text-3xl">{iconMap[currentPlace.category] || "📍"}</div>
               <div className="flex-1">
-                <div className="font-bold text-lg">{currentPlace.name}</div>
+                <div className="font-bold text-base">{currentPlace.name}</div>
                 {currentPlace.address && (
-                  <div className="text-sm text-gray-600">{currentPlace.address}</div>
+                  <div className="text-xs text-gray-600">{currentPlace.address}</div>
                 )}
               </div>
             </div>
-            <a
-              href={currentPlace.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-500 hover:underline break-all"
-            >
-              {currentPlace.url}
-            </a>
-          </div>
+          </a>
 
           {/* AI Response */}
           {isLoading ? (
@@ -209,7 +206,7 @@ export default function ChatPage() {
             </div>
           ) : currentPlace.info ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div className="text-sm whitespace-pre-wrap">{currentPlace.info}</div>
+              <div className="text-xs whitespace-pre-wrap">{currentPlace.info.replace(/施設名:.*\n/, '').replace(/説明:\s*/, '')}</div>
             </div>
           ) : null}
 
