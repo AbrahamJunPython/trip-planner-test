@@ -14,9 +14,13 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 export async function POST(req: NextRequest) {
   try {
-    const { departCoords, classifiedPlaces } = await req.json();
+    const body = await req.json();
+    const { departCoords, classifiedPlaces } = body;
+    
+    console.log("[calculate-trip-days] Received body:", JSON.stringify(body, null, 2));
 
-    if (!departCoords || !classifiedPlaces) {
+    if (!departCoords || !classifiedPlaces || !Array.isArray(classifiedPlaces)) {
+      console.log("[calculate-trip-days] Invalid input - returning default");
       return NextResponse.json({ tripDays: 1, stayDays: 0 });
     }
 
