@@ -324,6 +324,8 @@ export default function PlanPage() {
     let calculatedTripDays = 1;
     let calculatedStayDays = 0;
     
+    console.log("[generate] Sending to calculate-trip-days:", { departCoords, classifiedPlaces });
+    
     try {
       const calcRes = await fetch("/api/calculate-trip-days", {
         method: "POST",
@@ -331,9 +333,11 @@ export default function PlanPage() {
         body: JSON.stringify({ departCoords, classifiedPlaces })
       });
       const calcData = await calcRes.json();
+      console.log("[generate] Received from calculate-trip-days:", calcData);
       calculatedTripDays = calcData.tripDays || 1;
       calculatedStayDays = calcData.stayDays || 0;
-    } catch {
+    } catch (err) {
+      console.error("[generate] calculate-trip-days error:", err);
       calculatedTripDays = 1;
       calculatedStayDays = 0;
     }
