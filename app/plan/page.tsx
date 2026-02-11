@@ -92,6 +92,7 @@ export default function PlanPage() {
   const [destinationText, setDestinationText] = useState("");
   const [ogpUrls, setOgpUrls] = useState<string[]>([]);
   const [ogpItems, setOgpItems] = useState<Ogp[]>([]);
+  const [classifiedPlaces, setClassifiedPlaces] = useState<Array<{url: string; category: string; name: string; address: string}>>([]);
   
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [range, setRange] = useState<Range | undefined>(undefined);
@@ -179,7 +180,7 @@ export default function PlanPage() {
   }, [sp]);
 
   /* =====================
-   * OGP fetch
+   * OGP fetch & classify
    ===================== */
   useEffect(() => {
     if (ogpUrls.length === 0) return;
@@ -194,6 +195,38 @@ export default function PlanPage() {
         if (!res.ok) throw new Error('OGP取得に失敗しました');
         const data = await res.json().catch(() => ({ results: [] }));
         setOgpItems(data.results ?? []);
+        
+        // Classify places
+        const classified = await Promise.all(
+          (data.results ?? []).map(async (item: Ogp) => {
+            try {
+              const classRes = await fetch("/api/classify-place", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: item.title,
+                  description: item.description,
+                  url: item.url
+                })
+              });
+              const classData = await classRes.json();
+              return {
+                url: item.url,
+                category: classData.category || "visit",
+                name: classData.name || item.title || "",
+                address: classData.address || ""
+              };
+            } catch {
+              return {
+                url: item.url,
+                category: "visit",
+                name: item.title || "",
+                address: ""
+              };
+            }
+          })
+        );
+        setClassifiedPlaces(classified);
       } catch (error) {
         console.error('OGP fetch error:', error);
         setOgpItems([]);
@@ -589,8 +622,8 @@ export default function PlanPage() {
 
             {ogpItems.length > 0 ? (
               <div className="mt-2 space-y-2">
-                {ogpItems.map((item) => (
-                  <OgpCard key={item.url} item={item} onRemove={() => removeDestinationUrl(item.url)} />
+                {classifiedPlaces.map((place) => (
+                  <PlaceCard key={place.url} place={place} onRemove={() => removeDestinationUrl(place.url)} />
                 ))}
               </div>
             ) : (
@@ -748,6 +781,45 @@ export default function PlanPage() {
       </div>
     </main>
     </>
+  );
+}
+
+/* =====================
+ * Place Card
+ ===================== */
+function PlaceCard({ place, onRemove }: { place: {url: string; category: string; name: string; address: string}; onRemove: () => void }) {
+  const iconMap: Record<string, string> = {
+    visit: "📍",
+    food: "🍜",
+    hotel: "🛌",
+    move: "🚃"
+  };
+  
+  return (
+    <div className="border border-gray-200 rounded-2xl p-3 flex items-center gap-3 bg-white">
+      <div className="text-2xl">{iconMap[place.category] || "📍"}</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-bold truncate">{place.name}</div>
+        {place.address && (
+          <div className="text-xs text-gray-500 truncate">{place.address}</div>
+        )}
+      </div>
+      <a
+        href={place.url}
+        target="_blank"
+        rel="noreferrer"
+        className="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600"
+      >
+        URL
+      </a>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-xl text-red-500 hover:text-red-700 flex-shrink-0 p-1"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 

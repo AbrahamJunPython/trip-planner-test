@@ -23,3 +23,14 @@ export type Ogp = {
   provider?: OgpProvider;
 };
 
+export type PlaceCategory = "visit" | "food" | "hotel" | "move";
+
+export type ClassifiedPlace = {
+  url: string;
+  title?: string;
+  description?: string;
+  category: PlaceCategory;
+  name: string;
+  address: string;
+};
+
