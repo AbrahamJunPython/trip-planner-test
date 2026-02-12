@@ -1,11 +1,3 @@
-export type Step = 'area' | 'genre' | 'confirm'
-
-export type State = {
-  step: Step
-  area?: string
-  genre?: string
-}
-
 export type OgpProvider =
   | "instagram"
   | "tiktok"

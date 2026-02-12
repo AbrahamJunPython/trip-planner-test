@@ -14,21 +14,24 @@ export async function POST(req: NextRequest) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const { place, context } = await req.json();
+    const { place, context, ogpData } = await req.json();
 
     const categoryName = place.category === "hotel" ? "宿泊施設" : place.category === "visit" ? "観光地" : place.category === "food" ? "飲食店" : "移動手段";
 
     const systemPrompt = `あなたは旅行施設の情報を確認するアシスタントです。
-ユーザーが追加した施設について、以下の情報を簡潔に提供してください：
+ユーザーが追加した施設について、以下の情報をJSON形式で返してください：
 
-1. 施設名の確認
-2. 施設の特徴や魅力を80字以内で説明
+{
+  "facilityName": "正式な施設名",
+  "description": "施設の特徴や魅力を80字以内で説明",
+  "address": "正式な住所（都道府県から）",
+  "latitude": 緯度（数値、不明な場合はnull）,
+  "longitude": 経度（数値、不明な場合はnull）,
+  "officialUrl": "公式サイトのURL（不明な場合はnull）"
+}
 
-出力形式：
-施設名: [正式名称]
-説明: [80字以内の説明文]
-
-簡潔で分かりやすく、旅行者目線で書いてください。かわいい口語体でお願いします。`;
+簡潔で分かりやすく、旅行者目線で書いてください。かわいい口語体でお願いします。
+JSON形式のみを返し、他の文章は含めないでください。`;
 
     const userPrompt = `以下の施設について情報を教えてください：
 
@@ -47,11 +50,23 @@ URL: ${place.url}
       ],
       temperature: 0.7,
       max_tokens: 300,
+      response_format: { type: "json_object" },
     });
 
-    const reply = completion.choices[0]?.message?.content || "情報を取得できませんでした。";
+    const reply = completion.choices[0]?.message?.content || "{}";
+    const parsed = JSON.parse(reply);
 
-    return NextResponse.json({ reply });
+    return NextResponse.json({
+      facilityName: parsed.facilityName || place.name,
+      description: parsed.description || "情報を取得できませんでした。",
+      address: parsed.address || place.address,
+      latitude: parsed.latitude || null,
+      longitude: parsed.longitude || null,
+      officialUrl: parsed.officialUrl || place.url,
+      sourceUrl: place.url,
+      category: place.category,
+      ogp: ogpData || null
+    });
   } catch (error) {
     console.error("Chat API error:", error);
     return NextResponse.json(

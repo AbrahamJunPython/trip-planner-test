@@ -5,6 +5,7 @@ import { detectProvider } from "./provider";
 import {
   fetchTikTokOembed,
   fetchInstagramOembed,
+  fetchYouTubeOembed,
 } from "./oembed";
 
 function normalizeUrl(raw: string) {
@@ -159,6 +160,11 @@ export async function POST(req: Request) {
           const provider = detectProvider(url);
 
           // ★ SNSは oEmbed 優先
+          if (provider === "youtube") {
+            const o = await fetchYouTubeOembed(url);
+            if (o) return o;
+          }
+
           if (provider === "tiktok") {
             const o = await fetchTikTokOembed(url);
             if (o) return o;

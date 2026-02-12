@@ -739,6 +739,7 @@ export default function PlanPage() {
                   tripName,
                   destinationText,
                   ogpUrls,
+                  ogpItems,
                   classifiedPlaces,
                   departSelected,
                   departMode,

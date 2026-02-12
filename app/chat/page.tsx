@@ -13,7 +13,13 @@ type ClassifiedPlace = {
 
 type PlaceWithInfo = ClassifiedPlace & {
   confirmed: boolean;
-  info?: string;
+  facilityName?: string;
+  description?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  officialUrl?: string;
+  sourceUrl?: string;
+  ogp?: any;
 };
 
 export default function ChatPage() {
@@ -21,7 +27,7 @@ export default function ChatPage() {
   const [places, setPlaces] = useState<PlaceWithInfo[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [context, setContext] = useState<{ depart: string | null }>({ depart: null });
+  const [context, setContext] = useState<{ depart: string | null; ogpItems: any[] }>({ depart: null, ogpItems: [] });
 
   useEffect(() => {
     const savedData = sessionStorage.getItem("trip_form_data");
@@ -37,7 +43,7 @@ export default function ChatPage() {
         });
         
         setPlaces(sorted.map(p => ({ ...p, confirmed: false })));
-        setContext({ depart: data.departSelected || null });
+        setContext({ depart: data.departSelected || null, ogpItems: data.ogpItems || [] });
       } catch {
         router.push("/plan");
       }
@@ -47,7 +53,7 @@ export default function ChatPage() {
   }, [router]);
 
   useEffect(() => {
-    if (places.length > 0 && currentIndex < places.length && !places[currentIndex].info) {
+    if (places.length > 0 && currentIndex < places.length && !places[currentIndex].description) {
       fetchPlaceInfo();
     }
   }, [currentIndex, places]);
@@ -57,21 +63,35 @@ export default function ChatPage() {
     
     setIsLoading(true);
     try {
+      const currentPlace = places[currentIndex];
+      const ogpData = context.ogpItems.find((item: any) => item.url === currentPlace.url);
+      
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          place: places[currentIndex],
-          context,
+          place: currentPlace,
+          context: { depart: context.depart },
+          ogpData,
         }),
       });
 
       const data = await res.json();
       
-      if (data.reply) {
+      if (data.facilityName && data.description) {
         setPlaces(prev => {
           const updated = [...prev];
-          updated[currentIndex] = { ...updated[currentIndex], info: data.reply };
+          updated[currentIndex] = {
+            ...updated[currentIndex],
+            facilityName: data.facilityName,
+            description: data.description,
+            address: data.address,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            officialUrl: data.officialUrl,
+            sourceUrl: data.sourceUrl,
+            ogp: data.ogp
+          };
           return updated;
         });
       }
@@ -204,14 +224,14 @@ export default function ChatPage() {
             <div className="bg-gray-100 rounded-2xl p-4">
               <div className="text-sm text-gray-500">情報を取得中...</div>
             </div>
-          ) : currentPlace.info ? (
+          ) : currentPlace.description ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div className="text-xs whitespace-pre-wrap">{currentPlace.info.replace(/施設名:.*\n/, '').replace(/説明:\s*/, '')}</div>
+              <div className="text-xs whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
 
           {/* Question */}
-          {!isLoading && currentPlace.info && (
+          {!isLoading && currentPlace.description && (
             <div className="text-center py-4">
               <p className="text-lg font-bold mb-4">この施設を旅行に含めますか？</p>
             </div>
@@ -219,7 +239,7 @@ export default function ChatPage() {
         </div>
 
         {/* Actions */}
-        {!isLoading && currentPlace.info && (
+        {!isLoading && currentPlace.description && (
           <div className="border-t px-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <button
