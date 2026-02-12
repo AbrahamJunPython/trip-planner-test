@@ -120,36 +120,41 @@ export async function fetchTikTokOembed(inputUrl: string): Promise<Ogp | null> {
   }
 }
 
+function getMetaToken() {
+  const id = process.env.META_APP_ID;
+  const secret = process.env.META_APP_SECRET;
+  if (!id || !secret) return null;
+  return `${id}|${secret}`;
+}
+
 export async function fetchInstagramOembed(
   url: string
 ): Promise<Ogp | null> {
   try {
-    // Instagram oEmbedは公開投稿のみ対応、認証不要
-    const endpoint = `https://graph.facebook.com/v18.0/instagram_oembed?url=${encodeURIComponent(url)}&omitscript=true`;
+    const token = getMetaToken();
+    if (!token) return null;
 
-    const res = await fetch(endpoint, { 
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000)
-    });
-    
-    if (!res.ok) {
-      console.log(`[Instagram oEmbed] Failed: ${res.status}`);
-      return null;
-    }
+    const endpoint =
+      `https://graph.facebook.com/instagram_oembed?` +
+      `url=${encodeURIComponent(url)}` +
+      `&access_token=${encodeURIComponent(token)}` +
+      `&omitscript=true`;
+
+    const res = await fetch(endpoint, { cache: "no-store" });
+    if (!res.ok) return null;
 
     const data = (await res.json()) as any;
 
     return {
       url,
       provider: "instagram",
-      title: data?.title || "Instagram",
+      title: data?.title,
       description: data?.author_name ? `@${data.author_name}` : undefined,
       image: data?.thumbnail_url,
-      siteName: "Instagram",
+      siteName: data?.provider_name ?? "Instagram",
       favicon: "https://www.instagram.com/favicon.ico",
     };
-  } catch (err) {
-    console.log(`[Instagram oEmbed] Error:`, err);
+  } catch {
     return null;
   }
 }
