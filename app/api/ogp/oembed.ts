@@ -135,7 +135,7 @@ export async function fetchInstagramOembed(
     if (!token) return null;
 
     const endpoint =
-      `https://graph.facebook.com/instagram_oembed?` +
+      `https://graph.facebook.com/v24.0/instagram_oembed?` +
       `url=${encodeURIComponent(url)}` +
       `&access_token=${encodeURIComponent(token)}` +
       `&omitscript=true`;
