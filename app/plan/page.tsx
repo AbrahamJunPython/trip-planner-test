@@ -471,6 +471,7 @@ export default function PlanPage() {
               onClick={getCurrentLocation}
               disabled={isGettingLocation}
               className="mt-2 w-full py-2 px-4 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2"
+              aria-label="現在地から出発地を設定"
             >
               {isGettingLocation ? "取得中..." : "📍 現在地から設定"}
             </button>
@@ -576,6 +577,7 @@ export default function PlanPage() {
                 type="button"
                 onClick={addDestinationUrl}
                 className="px-4 py-2 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600"
+                aria-label="行き先URLを追加"
               >
                 追加
               </button>
@@ -762,6 +764,7 @@ export default function PlanPage() {
               onClick={generate}
               disabled={!canGenerate}
               className="w-full rounded-2xl bg-orange-400 text-white py-4 font-bold disabled:opacity-40"
+              aria-label="旅行プランを生成"
             >
               ラフプラン生成
             </button>

@@ -1,4 +1,5 @@
 import './globals.css'
+import './lib/init'
 import { MobileShell } from './components/MobileShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 

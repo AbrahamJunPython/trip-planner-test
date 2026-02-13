@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { CLASSIFY_PLACE_SYSTEM_PROMPT, buildClassifyPlacePrompt } from "@/app/prompts/classify-place";
 
 const openai = process.env.OPENAI_API_KEY 
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -17,26 +18,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const prompt = `以下の施設情報を分析して、カテゴリ(visit/food/hotel/move)と住所を抽出してください。
-
-タイトル: ${title || ""}
-説明: ${description || ""}
-URL: ${url || ""}
-
-JSON形式で返してください:
-{
-  "category": "visit" | "food" | "hotel" | "move",
-  "name": "施設名",
-  "address": "正確な番地までの住所"、番地までわからない場合は楽天トラベル(https://travel.rakuten.co.jp/)で調査してください。,
-  "pasted_url": "元のURL",
-  "corrected_url": "公式サイト等の正しいURL"、わからない場合は楽天トラベル(https://travel.rakuten.co.jp/)で調査してください。
-}
-
-カテゴリの判定基準:
-- visit: 観光地、寺社、美術館、公園、テーマパーク等
-- food: レストラン、カフェ、居酒屋等の飲食店
-- hotel: ホテル、旅館、宿泊施設
-- move: 駅、空港、バス停等の交通施設`;
+    const prompt = CLASSIFY_PLACE_SYSTEM_PROMPT + "\n\n" + buildClassifyPlacePrompt({ title, description, url });
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

@@ -562,7 +562,7 @@ export default function ResultPage() {
             ) : null}
           </div>
 
-          <button type="button" onClick={() => router.push("/plan")} className="shrink-0 hover:opacity-80 transition-opacity">
+          <button type="button" onClick={() => router.push("/plan")} className="shrink-0 hover:opacity-80 transition-opacity" aria-label="プラン入力に戻る">
             <Image src="/cocoico-ai_logo.png" alt="入力に戻る" width={60} height={60} priority />
           </button>
         </div>
@@ -670,6 +670,7 @@ export default function ResultPage() {
                                     rel="noreferrer"
                                     className="w-6 h-6 flex items-center justify-center text-blue-600 hover:bg-blue-100 rounded transition-colors"
                                     title="公式URLを開く"
+                                    aria-label={`${it.title}の公式サイトを開く`}
                                   >
                                     🔗
                                   </a>
@@ -683,6 +684,7 @@ export default function ResultPage() {
                                       window.open(`https://www.google.com/search?q=${query}`, "_blank");
                                     }}
                                     className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200 font-medium"
+                                    aria-label={`${it.title}を予約`}
                                   >
                                     予約
                                   </button>

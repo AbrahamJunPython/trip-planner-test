@@ -1,1 +1,7 @@
-{\n  \"extends\": \"next/core-web-vitals\",\n  \"rules\": {\n    \"@next/next/no-img-element\": \"off\",\n    \"react-hooks/exhaustive-deps\": \"warn\"\n  }\n}\n
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "@next/next/no-img-element": "off",
+    "react-hooks/exhaustive-deps": "warn"
+  }
+}
