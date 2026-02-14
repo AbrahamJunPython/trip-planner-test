@@ -317,12 +317,12 @@ export default function ChatPage() {
             </div>
           ) : currentPlace.description ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div className="text-sm whitespace-pre-wrap">{currentPlace.description}</div>
+              <div style={{fontSize: '13px'}} className="whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
           {/* Actions */}
           {!isLoading && currentPlace.description && (
-            <div className="px-4 py-4">
+            <div className="px-3 py-3">
               <div className="flex gap-4">
                 <button
                   onClick={handleDelete}
