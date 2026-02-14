@@ -251,7 +251,7 @@ export default function ChatPage() {
                   <div className="flex-1">
                     <div className="font-bold text-sm">{currentPlace.name}</div>
                     {currentPlace.address && (
-                      <div className="text-xs text-gray-500">{currentPlace.address}</div>
+                      <div style={{fontSize: '10px'}} className="text-gray-500">{currentPlace.address}</div>
                     )}
                   </div>
                 </div>
