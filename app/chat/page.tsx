@@ -114,15 +114,14 @@ export default function ChatPage() {
   };
 
   const handleReserve = () => {
-    const url = currentPlace.officialUrl || currentPlace.url;
-    if (url) {
-      window.open(url, "_blank");
-    }
+    const query = `${currentPlace.name} ${currentPlace.address} 予約`;
+    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    window.open(googleUrl, "_blank");
     addToTaskList();
     if (currentIndex < places.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      saveAndReturn();
+      router.push("/task");
     }
   };
 
@@ -136,7 +135,7 @@ export default function ChatPage() {
     if (currentIndex < places.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      saveAndReturn();
+      router.push("/task");
     }
   };
 
@@ -183,6 +182,7 @@ export default function ChatPage() {
   }
 
   const currentPlace = places[currentIndex];
+  const canReserve = currentPlace.category === "hotel" || currentPlace.category === "move";
   const iconMap: Record<string, string> = {
     visit: "📍",
     food: "🍜",
@@ -337,7 +337,12 @@ export default function ChatPage() {
               </button>
               <button
                 onClick={handleReserve}
-                className="flex-1 py-4 bg-orange-400 text-white rounded-2xl font-bold hover:bg-orange-500"
+                disabled={!canReserve}
+                className={`flex-1 py-4 rounded-2xl font-bold ${
+                  canReserve 
+                    ? "bg-orange-400 text-white hover:bg-orange-500 cursor-pointer" 
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
               >
                 今すぐ予約
               </button>
