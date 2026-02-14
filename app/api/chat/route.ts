@@ -6,6 +6,7 @@ import { fetchOpenAIWithRetry } from "@/app/lib/retry";
 import { getCircuitBreaker } from "@/app/lib/circuit-breaker";
 import { fetchWithCache } from "@/app/lib/cache";
 import { getRateLimiter } from "@/app/lib/rate-limiter";
+import { chatRequestSchema, validateRequest } from "@/app/lib/validation";
 
 const logger = createLogger("/api/chat");
 const openaiBreaker = getCircuitBreaker("openai-chat", {
@@ -30,7 +31,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { place, context, ogpData } = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateRequest(chatRequestSchema, body);
+    if (!validation.success && "errors" in validation) {
+      logger.warn("Invalid chat request", {
+        issues: validation.errors.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+      return NextResponse.json(
+        { error: "Invalid request payload" },
+        { status: 400 }
+      );
+    }
+
+    if (!("data" in validation)) {
+      return NextResponse.json(
+        { error: "Invalid request payload" },
+        { status: 400 }
+      );
+    }
+
+    const { place, context, ogpData } = validation.data;
     
     logger.info("Chat request received", {
       placeName: place.name,

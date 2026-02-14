@@ -376,7 +376,7 @@ export default function ChatPage() {
                   onClick={handleCheck}
                   className="w-1/4 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
                 >
-                  チェック
+                  削除
                 </button>
                 <button
                   onClick={handleReserve}

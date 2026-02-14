@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
@@ -112,20 +112,6 @@ async function callFill(req: FillRequest) {
   return j?.item as Itinerary["days"][number]["items"][number];
 }
 
-function getFillTargetsForDay(day: Itinerary["days"][number]) {
-  const targets: Array<{ idx: number; kind: FillKind }> = [];
-  day.items.forEach((it, idx) => {
-    // ★ Day1の見栄え改善を最速でやるなら、この3つだけで十分
-    if (it.kind === "visit" || it.kind === "food" || it.kind === "hotel") {
-      targets.push({ idx, kind: it.kind });
-    }
-
-    // moveまで埋めたい場合はここを追加
-    // if (it.kind === "move") targets.push({ idx, kind: "move" });
-  });
-  return targets;
-}
-
 function computeDayBudget(day: Itinerary["days"][number]) {
   return day.items.reduce((s, x) => s + (safeNumber(x.budgetPerPerson) ?? 0), 0);
 }
@@ -142,12 +128,7 @@ export default function ResultPage() {
   const [isEditingTripName, setIsEditingTripName] = useState(false);
   const [editedTripName, setEditedTripName] = useState("");
 
-  // ★ Day1 fill状態
-  const [isFillingDay1, setIsFillingDay1] = useState(false);
   const [fillErrors, setFillErrors] = useState<string[]>([]);
-
-  // ★ 何度もDay1 fillが走らないようにする
-  const day1FillStartedRef = useRef(false);
 
   const header = useMemo(() => {
     if (!itinerary) return null;
@@ -281,147 +262,6 @@ export default function ResultPage() {
 
     setFillStage({ running: false, currentDay: null });
   }
-
-    // outline受領 → 即描画 → Day1だけ並列fill
-    const fillDay1Incrementally = async (base: Itinerary) => {
-      if (day1FillStartedRef.current) return;
-      day1FillStartedRef.current = true;
-
-      const dayIndex = 1;
-      const day = base.days.find((d) => d.dayIndex === dayIndex);
-      if (!day) return;
-
-      setIsFillingDay1(true);
-      setFillErrors([]);
-
-      const planInput = loadPlanInputFromSession();
-      const hints = buildHintsFromPlanInput(planInput);
-
-      // areaTitle は Day1 visit.title を最優先
-      const visitTitle = day.items.find((x) => x.kind === "visit")?.title ?? "";
-      const areaTitle = (visitTitle || safeString(day.title) || "周辺エリア").trim();
-
-      const orderedKinds: FillKind[] = ["visit", "food", "hotel", "move"]; // Day1はこの順で必ず
-
-      const targets: Array<{ idx: number; kind: FillKind }> = [];
-      for (const k of orderedKinds) {
-        const idx = day.items.findIndex((it) => it.kind === k);
-        if (idx >= 0) targets.push({ idx, kind: k });
-      }
-
-    const tasks = targets.map(({ idx, kind }) => {
-      const prevTitle = idx > 0 ? day.items[idx - 1]?.title ?? null : null;
-      const nextTitle = idx < day.items.length - 1 ? day.items[idx + 1]?.title ?? null : null;
-
-      const req: FillRequest = {
-        dayIndex,
-        kind,
-        areaTitle,
-        departLabel: hints.departLabel,
-        outlineTitle: day.items[idx]?.title ?? "",
-        prevTitle,
-        nextTitle,
-        destinationHint: hints.destinationHint,
-        optional: hints.optional,
-        previousVisits: undefined, // Day1は過去の訪問地なし
-        tripDays: base.days.length,
-      };  
-
-      return (async () => {
-        const filled = await callFill(req);
-        // 返ってきた順に差し替え（race回避のため関数型更新）
-        setItinerary((prev) => {
-          if (!prev) return prev;
-
-          // deep copy（素直にJSON方式。軽くするなら structuredClone でもOK）
-          const copy: Itinerary = JSON.parse(JSON.stringify(prev));
-          const d = copy.days.find((x) => x.dayIndex === dayIndex);
-          if (!d) return prev;
-
-          const cur = d.items[idx];
-          if (!cur) return prev;
-
-          const prevTitle2 = idx > 0 ? d.items[idx - 1]?.title ?? null : null;
-          const nextTitle2 = idx < d.items.length - 1 ? d.items[idx + 1]?.title ?? null : null;
-
-          d.items[idx] = {
-            ...cur,
-            ...filled,
-            kind: cur.kind,
-            title: normalizeFilledTitle(cur.kind as "move" | "visit" | "food" | "hotel", filled?.title, areaTitle, prevTitle2, nextTitle2),
-          };
-
-          // ★ visitが入った瞬間にDayタイトルも更新（見栄えUP）
-          if (cur.kind === "visit" && (!d.title || d.title.trim() === "")) {
-            d.title = d.items[idx].title;
-          }
-
-          d.budgetPerPerson = computeDayBudget(d);
-          copy.budgetPerPerson = computeTripBudget(copy);
-
-          return copy;
-        });
-      })().catch((e) => {
-        setFillErrors((prev) => [...prev, `${kind}の詳細生成に失敗: ${e?.message ?? "unknown"}`]);
-      });
-    });
-
-    for (const { idx, kind } of targets) {
-      const prevTitle = idx > 0 ? day.items[idx - 1]?.title ?? null : null;
-      const nextTitle = idx < day.items.length - 1 ? day.items[idx + 1]?.title ?? null : null;
-
-      const req: FillRequest = {
-        dayIndex,
-        kind,
-        areaTitle,
-        departLabel: hints.departLabel,
-        outlineTitle: day.items[idx]?.title ?? "",
-        prevTitle,
-        nextTitle,
-        destinationHint: hints.destinationHint,
-        optional: hints.optional,
-        previousVisits: undefined, // Day1は過去の訪問地なし
-        tripDays: base.days.length,
-      };
-
-      try {
-        const filled = await callFill(req);
-
-        setItinerary((prev) => {
-          if (!prev) return prev;
-          const copy: Itinerary = JSON.parse(JSON.stringify(prev));
-          const d = copy.days.find((x) => x.dayIndex === dayIndex);
-          if (!d) return prev;
-
-          const cur = d.items[idx];
-          if (!cur) return prev;
-
-          const prevTitle2 = idx > 0 ? d.items[idx - 1]?.title ?? null : null;
-          const nextTitle2 = idx < d.items.length - 1 ? d.items[idx + 1]?.title ?? null : null;
-
-          d.items[idx] = {
-            ...cur,
-            ...filled,
-            kind: cur.kind,
-            title: normalizeFilledTitle(cur.kind as "move" | "visit" | "food" | "hotel", filled?.title, areaTitle, prevTitle2, nextTitle2),
-          };
-
-          // ★ visit が埋まった瞬間に Dayタイトルもリッチ化
-          if (cur.kind === "visit" && (!d.title || d.title.trim() === "")) {
-            d.title = d.items[idx].title;
-          }
-
-          d.budgetPerPerson = computeDayBudget(d);
-          copy.budgetPerPerson = computeTripBudget(copy);
-          return copy;
-        });
-      } catch (e: any) {
-        setFillErrors((prev) => [...prev, `${kind}の詳細生成に失敗: ${e?.message ?? "unknown"}`]);
-      }
-    }
-
-    setIsFillingDay1(false);
-  };
 
   /* =====================
    * Load itinerary (shared URL or sessionStorage)
@@ -568,13 +408,6 @@ export default function ResultPage() {
         </div>
 
         {itinerary.summary ? <p className="text-sm text-gray-600 mt-3 leading-relaxed">{itinerary.summary}</p> : null}
-
-        {/* Day1 fill banner */}
-        {isFillingDay1 ? (
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-            1日目の詳細を確定中…（店名・観光名・宿を埋めています）
-          </div>
-        ) : null}
 
         {fillErrors.length ? (
           <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">

@@ -12,32 +12,46 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function getPlaceCoords(place: Record<string, unknown>): { lat: number; lon: number } | null {
+  const lat = toFiniteNumber(place.latitude ?? place.lat);
+  const lon = toFiniteNumber(place.longitude ?? place.lon);
+
+  if (lat === null || lon === null) return null;
+  return { lat, lon };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { departCoords, classifiedPlaces } = body;
-    
-    console.log("[calculate-trip-days] Received body:", JSON.stringify(body, null, 2));
 
     if (!classifiedPlaces || !Array.isArray(classifiedPlaces)) {
-      console.log("[calculate-trip-days] Invalid input - returning default");
       return NextResponse.json({ tripDays: 1, stayDays: 0 });
     }
 
+    const places = classifiedPlaces.filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null);
+
     // カテゴリ別カウント
-    const visitCount = classifiedPlaces.filter((p: any) => p.category === "visit").length;
-    const hotelCount = classifiedPlaces.filter((p: any) => p.category === "hotel").length;
-    
-    console.log("[calculate-trip-days] visitCount:", visitCount, "hotelCount:", hotelCount);
-    console.log("[calculate-trip-days] classifiedPlaces:", JSON.stringify(classifiedPlaces, null, 2));
-    
-    // 距離計算（出発地から最初の目的地まで）
+    const visitCount = places.filter((p) => p.category === "visit").length;
+    const hotelCount = places.filter((p) => p.category === "hotel").length;
+
+    const departLat = toFiniteNumber(departCoords?.lat);
+    const departLon = toFiniteNumber(departCoords?.lon);
+
+    // 距離計算（出発地→各候補の最大距離）
     let maxDistance = 0;
-    for (const place of classifiedPlaces) {
+    for (const place of places) {
       if (place.category === "visit" || place.category === "hotel") {
-        // 住所から緯度経度を取得（簡易版：ここでは仮の計算）
-        // 実際にはgeocoding APIを使用
-        const distance = Math.random() * 500; // 仮の距離
+        if (departLat === null || departLon === null) continue;
+        const coords = getPlaceCoords(place);
+        if (!coords) continue;
+
+        const distance = calculateDistance(departLat, departLon, coords.lat, coords.lon);
         maxDistance = Math.max(maxDistance, distance);
       }
     }
@@ -67,8 +81,6 @@ export async function POST(req: NextRequest) {
     tripDays = Math.min(tripDays, 7);
     
     const stayDays = tripDays - 1;
-    
-    console.log("[calculate-trip-days] Final result - tripDays:", tripDays, "stayDays:", stayDays);
 
     return NextResponse.json({ tripDays, stayDays });
   } catch (error) {
