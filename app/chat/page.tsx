@@ -13,6 +13,7 @@ type ClassifiedPlace = {
 
 type PlaceWithInfo = ClassifiedPlace & {
   confirmed: boolean;
+  isDisabled?: boolean;
   facilityName?: string;
   description?: string;
   latitude?: number | null;
@@ -56,8 +57,24 @@ export default function ChatPage() {
   }, [router]);
 
   useEffect(() => {
-    if (places.length > 0 && currentIndex < places.length && !places[currentIndex].description) {
+    if (
+      places.length > 0 &&
+      currentIndex < places.length &&
+      !places[currentIndex].description &&
+      !places[currentIndex].isDisabled
+    ) {
       fetchPlaceInfo();
+    }
+  }, [currentIndex, places]);
+
+  useEffect(() => {
+    if (places.length === 0 || currentIndex >= places.length) return;
+    if (!places[currentIndex].isDisabled) return;
+
+    if (currentIndex < places.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      saveAndReturn();
     }
   }, [currentIndex, places]);
 
@@ -105,11 +122,22 @@ export default function ChatPage() {
     }
   };
 
-  const handleDelete = () => {
-    if (currentIndex < places.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      saveAndReturn();
+  const handleCheck = () => {
+    if (places.length === 0) return;
+
+    setPlaces(prev => {
+      if (prev.length <= 1) {
+        return [{ ...prev[0], isDisabled: true, confirmed: false }];
+      }
+
+      const updated = [...prev];
+      const [target] = updated.splice(currentIndex, 1);
+      updated.push({ ...target, isDisabled: true, confirmed: false });
+      return updated;
+    });
+
+    if (places.length > 1) {
+      setCurrentIndex(currentIndex >= places.length - 1 ? 0 : currentIndex);
     }
   };
 
@@ -269,34 +297,50 @@ export default function ChatPage() {
             {/* Right Half */}
             <div className="w-2/3 space-y-4">
               {/* Place Card */}
-              <a
-                href={currentPlace.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block border-2 border-gray-300 rounded-2xl p-3 bg-white hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
-                  <div className="flex-1">
-                    <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
-                    {currentPlace.address && (
-                      <div style={{fontSize: '8px'}} className="text-gray-500">{currentPlace.address}</div>
-                    )}
+              {currentPlace.isDisabled ? (
+                <div className="block border-2 border-gray-200 rounded-2xl p-3 bg-gray-100 opacity-60">
+                  <div className="flex items-center gap-2">
+                    <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
+                    <div className="flex-1">
+                      <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
+                      {currentPlace.address && (
+                        <div style={{fontSize: '8px'}} className="text-gray-500">{currentPlace.address}</div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </a>
-
-              {/* URL Buttons */}
-              <div className="space-y-2">
+              ) : (
                 <a
                   href={currentPlace.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full py-3 px-4 bg-blue-500 text-white rounded-2xl text-sm font-bold hover:bg-blue-600 text-center"
+                  className="block border-2 border-gray-300 rounded-2xl p-3 bg-white hover:bg-gray-50 transition-colors"
                 >
-                  📋 貼り付けたURL
+                  <div className="flex items-center gap-2">
+                    <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
+                    <div className="flex-1">
+                      <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
+                      {currentPlace.address && (
+                        <div style={{fontSize: '8px'}} className="text-gray-500">{currentPlace.address}</div>
+                      )}
+                    </div>
+                  </div>
                 </a>
-                {currentPlace.officialUrl && currentPlace.officialUrl !== currentPlace.url && (
+              )}
+
+              {/* URL Buttons */}
+              <div className="space-y-2">
+                {!currentPlace.isDisabled && (
+                  <a
+                    href={currentPlace.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full py-3 px-4 bg-blue-500 text-white rounded-2xl text-sm font-bold hover:bg-blue-600 text-center"
+                  >
+                    📋 貼り付けたURL
+                  </a>
+                )}
+                {!currentPlace.isDisabled && currentPlace.officialUrl && currentPlace.officialUrl !== currentPlace.url && (
                   <a
                     href={currentPlace.officialUrl}
                     target="_blank"
@@ -315,20 +359,24 @@ export default function ChatPage() {
             <div className="bg-gray-100 rounded-2xl p-4">
               <div className="text-sm text-gray-500">考え中・・・</div>
             </div>
+          ) : currentPlace.isDisabled ? (
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <div style={{fontSize: '11px'}} className="text-gray-500">このPlaceCardはチェック済みのため機能がオフです</div>
+            </div>
           ) : currentPlace.description ? (
             <div className="bg-gray-100 rounded-2xl p-4">
               <div style={{fontSize: '11px'}} className="whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
           {/* Actions */}
-          {!isLoading && currentPlace.description && (
+          {!isLoading && currentPlace.description && !currentPlace.isDisabled && (
             <div className="px-3 py-3">
               <div className="flex gap-4">
                 <button
-                  onClick={handleDelete}
+                  onClick={handleCheck}
                   className="w-1/4 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
                 >
-                  削除
+                  チェック
                 </button>
                 <button
                   onClick={handleReserve}

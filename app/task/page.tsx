@@ -44,9 +44,9 @@ export default function TaskPage() {
             onClick={() => router.back()}
             className="text-emerald-500 font-bold"
           >
-            ← 戻る
+            戻る
           </button>
-          <img src="/cocoico-ai.png" alt="cocoico" className="h-16" />
+          <img src="/cocoico-ai.png" alt="cocoico" className="h-10" />
           <div className="w-16"></div>
         </div>
 
@@ -77,9 +77,9 @@ export default function TaskPage() {
                     {iconMap[task.category] || "📍"}
                   </button>
                   <div className="flex-1">
-                    <div className="font-bold text-base">{task.name}</div>
+                    <div style={{fontSize: '13px'}} className="font-bold text-base">{task.name}</div>
                     {task.address && (
-                      <div className="text-xs text-gray-500 mt-1">{task.address}</div>
+                      <div style={{fontSize: '8px'}} className="text-xs text-gray-500 mt-1">{task.address}</div>
                     )}
                     {expandedIndex === idx && task.description && (
                       <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
@@ -93,7 +93,7 @@ export default function TaskPage() {
                         rel="noreferrer"
                         className="px-4 py-2 bg-blue-500 text-white rounded-xl text-xs font-bold hover:bg-blue-600"
                       >
-                        元URL
+                        予約
                       </a>
                       {task.officialUrl && task.officialUrl !== task.url && (
                         <a
