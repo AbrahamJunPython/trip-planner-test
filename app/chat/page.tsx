@@ -326,14 +326,14 @@ export default function ChatPage() {
               <div className="flex gap-4">
                 <button
                   onClick={handleDelete}
-                  className="w-1/4 py-4 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
+                  className="w-1/4 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
                 >
                   削除
                 </button>
                 <button
                   onClick={handleReserve}
                   disabled={!canReserve}
-                  className={`flex-1 py-4 rounded-2xl font-bold ${
+                  className={`flex-1 py-3 rounded-2xl font-bold ${
                     canReserve 
                       ? "bg-orange-400 text-white hover:bg-orange-500 cursor-pointer" 
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -343,7 +343,7 @@ export default function ChatPage() {
                 </button>
                 <button
                   onClick={handleAdd}
-                  className="w-1/4 py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
+                  className="w-1/4 py-3 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
                 >
                   次へ
                 </button>
