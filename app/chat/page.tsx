@@ -202,33 +202,14 @@ export default function ChatPage() {
             onClick={saveAndReturn}
             className="text-emerald-500 font-bold"
           >
-            ← 保存して戻る
+            戻る
           </button>
-          <div className="text-sm text-gray-500">
-            {currentIndex + 1} / {places.length}
-          </div>
           <button
             onClick={() => router.push("/task")}
             className="text-blue-500 font-bold"
           >
-            タスク →
+            タスク
           </button>
-        </div>
-
-        {/* Progress */}
-        <div className="px-4 py-2 bg-gray-50 border-b">
-          <div className="flex gap-1">
-            {places.map((_, idx) => (
-              <div
-                key={idx}
-                className={`flex-1 h-2 rounded-full ${
-                  idx < currentIndex ? "bg-emerald-500" :
-                  idx === currentIndex ? "bg-blue-500" :
-                  "bg-gray-200"
-                }`}
-              />
-            ))}
-          </div>
         </div>
 
         {/* Content */}
@@ -258,7 +239,21 @@ export default function ChatPage() {
                 : "日帰り"}
             </div>
           </div>
-
+          {/* Progress */}
+          <div className="px-4 py-2 bg-gray-50 border-b">
+            <div className="flex gap-1">
+              {places.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`flex-1 h-2 rounded-full ${
+                    idx < currentIndex ? "bg-emerald-500" :
+                    idx === currentIndex ? "bg-blue-500" :
+                    "bg-gray-200"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
           {/* Left-Right Split */}
           <div className="flex gap-4">
             {/* Left Half - AI Image */}
@@ -326,38 +321,37 @@ export default function ChatPage() {
               <div className="text-sm whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
-        </div>
-
-        {/* Actions */}
-        {!isLoading && currentPlace.description && (
-          <div className="border-t px-4 py-4">
-            <div className="flex gap-4">
-              <button
-                onClick={handleDelete}
-                className="w-1/4 py-4 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
-              >
-                削除
-              </button>
-              <button
-                onClick={handleReserve}
-                disabled={!canReserve}
-                className={`flex-1 py-4 rounded-2xl font-bold ${
-                  canReserve 
-                    ? "bg-orange-400 text-white hover:bg-orange-500 cursor-pointer" 
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                今すぐ予約
-              </button>
-              <button
-                onClick={handleAdd}
-                className="w-1/4 py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
-              >
-                次へ
-              </button>
+          {/* Actions */}
+          {!isLoading && currentPlace.description && (
+            <div className="border-t px-4 py-4">
+              <div className="flex gap-4">
+                <button
+                  onClick={handleDelete}
+                  className="w-1/4 py-4 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
+                >
+                  削除
+                </button>
+                <button
+                  onClick={handleReserve}
+                  disabled={!canReserve}
+                  className={`flex-1 py-4 rounded-2xl font-bold ${
+                    canReserve 
+                      ? "bg-orange-400 text-white hover:bg-orange-500 cursor-pointer" 
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  今すぐ予約
+                </button>
+                <button
+                  onClick={handleAdd}
+                  className="w-1/4 py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
+                >
+                  次へ
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </main>
   );
