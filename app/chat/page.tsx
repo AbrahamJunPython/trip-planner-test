@@ -249,9 +249,9 @@ export default function ChatPage() {
                 <div className="flex items-center gap-2">
                   <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
                   <div className="flex-1">
-                    <div className="font-bold text-sm">{currentPlace.name}</div>
+                    <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
                     {currentPlace.address && (
-                      <div style={{fontSize: '5px'}} className="text-gray-500">{currentPlace.address}</div>
+                      <div style={{fontSize: '8px'}} className="text-gray-500">{currentPlace.address}</div>
                     )}
                   </div>
                 </div>
