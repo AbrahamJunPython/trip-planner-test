@@ -244,14 +244,14 @@ export default function ChatPage() {
                 href={currentPlace.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block border-2 border-gray-300 rounded-2xl p-4 bg-white hover:bg-gray-50 transition-colors"
+                className="block border-2 border-gray-300 rounded-2xl p-3 bg-white hover:bg-gray-50 transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  <div className="text-3xl">{iconMap[currentPlace.category] || "📍"}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
                   <div className="flex-1">
-                    <div className="font-bold text-base">{currentPlace.name}</div>
+                    <div className="font-bold text-sm">{currentPlace.name}</div>
                     {currentPlace.address && (
-                      <div className="text-xs text-gray-600">{currentPlace.address}</div>
+                      <div className="text-xs text-gray-500">{currentPlace.address}</div>
                     )}
                   </div>
                 </div>
