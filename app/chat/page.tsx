@@ -141,15 +141,18 @@ export default function ChatPage() {
 
   const addToTaskList = () => {
     const taskList = JSON.parse(sessionStorage.getItem("task_list") || "[]");
-    taskList.push({
-      name: currentPlace.name,
-      category: currentPlace.category,
-      address: currentPlace.address,
-      url: currentPlace.url,
-      officialUrl: currentPlace.officialUrl,
-      description: currentPlace.description
-    });
-    sessionStorage.setItem("task_list", JSON.stringify(taskList));
+    const exists = taskList.some((task: any) => task.name === currentPlace.name);
+    if (!exists) {
+      taskList.push({
+        name: currentPlace.name,
+        category: currentPlace.category,
+        address: currentPlace.address,
+        url: currentPlace.url,
+        officialUrl: currentPlace.officialUrl,
+        description: currentPlace.description
+      });
+      sessionStorage.setItem("task_list", JSON.stringify(taskList));
+    }
   };
 
   const saveAndReturn = () => {
