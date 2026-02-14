@@ -105,13 +105,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleYes = () => {
-    setPlaces(prev => {
-      const updated = [...prev];
-      updated[currentIndex] = { ...updated[currentIndex], confirmed: true };
-      return updated;
-    });
-    
+  const handleDelete = () => {
     if (currentIndex < places.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -119,12 +113,44 @@ export default function ChatPage() {
     }
   };
 
-  const handleNo = () => {
-    setPlaces(prev => prev.filter((_, idx) => idx !== currentIndex));
-    
-    if (currentIndex >= places.length - 1 && places.length > 1) {
-      setCurrentIndex(currentIndex - 1);
+  const handleReserve = () => {
+    const url = currentPlace.officialUrl || currentPlace.url;
+    if (url) {
+      window.open(url, "_blank");
     }
+    addToTaskList();
+    if (currentIndex < places.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      saveAndReturn();
+    }
+  };
+
+  const handleAdd = () => {
+    setPlaces(prev => {
+      const updated = [...prev];
+      updated[currentIndex] = { ...updated[currentIndex], confirmed: true };
+      return updated;
+    });
+    addToTaskList();
+    if (currentIndex < places.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      saveAndReturn();
+    }
+  };
+
+  const addToTaskList = () => {
+    const taskList = JSON.parse(sessionStorage.getItem("task_list") || "[]");
+    taskList.push({
+      name: currentPlace.name,
+      category: currentPlace.category,
+      address: currentPlace.address,
+      url: currentPlace.url,
+      officialUrl: currentPlace.officialUrl,
+      description: currentPlace.description
+    });
+    sessionStorage.setItem("task_list", JSON.stringify(taskList));
   };
 
   const saveAndReturn = () => {
@@ -163,7 +189,7 @@ export default function ChatPage() {
     hotel: "🛌",
     move: "🚃"
   };
-
+  
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <div className="max-w-[820px] mx-auto w-full flex flex-col h-screen">
@@ -178,6 +204,12 @@ export default function ChatPage() {
           <div className="text-sm text-gray-500">
             {currentIndex + 1} / {places.length}
           </div>
+          <button
+            onClick={() => router.push("/task")}
+            className="text-blue-500 font-bold"
+          >
+            タスク →
+          </button>
         </div>
 
         {/* Progress */}
@@ -291,30 +323,29 @@ export default function ChatPage() {
               <div className="text-sm whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
-
-          {/* Question */}
-          {!isLoading && currentPlace.description && (
-            <div className="text-center py-4">
-              <p className="text-lg font-bold mb-4">この施設を旅行に含めますか？</p>
-            </div>
-          )}
         </div>
 
         {/* Actions */}
         {!isLoading && currentPlace.description && (
           <div className="border-t px-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="flex gap-4">
               <button
-                onClick={handleNo}
-                className="py-4 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
+                onClick={handleDelete}
+                className="w-1/4 py-4 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
               >
-                ✕ いいえ
+                削除
               </button>
               <button
-                onClick={handleYes}
-                className="py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
+                onClick={handleReserve}
+                className="flex-1 py-4 bg-orange-400 text-white rounded-2xl font-bold hover:bg-orange-500"
               >
-                ✓ はい
+                今すぐ予約
+              </button>
+              <button
+                onClick={handleAdd}
+                className="w-1/4 py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
+              >
+                次へ
               </button>
             </div>
           </div>
