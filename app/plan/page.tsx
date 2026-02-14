@@ -125,6 +125,22 @@ export default function PlanPage() {
    ===================== */
   const [newUrl, setNewUrl] = useState("");
 
+  /* =====================
+   * プリフェッチ実装
+   ===================== */
+  const debouncedUrl = useDebounce(newUrl, 500);
+  
+  useEffect(() => {
+    if (!debouncedUrl || !debouncedUrl.startsWith('http')) return;
+    
+    // バックグラウンドでOGP取得開始（結果は使わない）
+    fetch('/api/ogp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: [debouncedUrl] })
+    }).catch(() => {});
+  }, [debouncedUrl]);
+
   const addDestinationUrl = async () => {
     if (!newUrl.trim()) return;
     
@@ -177,7 +193,7 @@ export default function PlanPage() {
   }, [sp]);
 
   /* =====================
-   * OGP fetch & classify
+   * OGP fetch & classify (並列処理最適化)
    ===================== */
   useEffect(() => {
     if (ogpUrls.length === 0) return;
@@ -193,7 +209,7 @@ export default function PlanPage() {
         const data = await res.json().catch(() => ({ results: [] }));
         setOgpItems(data.results ?? []);
         
-        // Classify places
+        // ✅ 並列処理: 全URLを同時にclassify
         const classified = await Promise.all(
           (data.results ?? []).map(async (item: Ogp) => {
             try {
