@@ -211,7 +211,21 @@ export default function ChatPage() {
             タスク
           </button>
         </div>
-
+        {/* Progress */}
+        <div className="px-4 py-2 bg-gray-50 border-b">
+          <div className="flex gap-1">
+            {places.map((_, idx) => (
+              <div
+                key={idx}
+                className={`flex-1 h-2 rounded-full ${
+                  idx < currentIndex ? "bg-emerald-500" :
+                  idx === currentIndex ? "bg-blue-500" :
+                  "bg-gray-200"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           {/* Trip Name */}
@@ -237,21 +251,6 @@ export default function ChatPage() {
               {places.filter(p => p.category === 'hotel').length > 0
                 ? `${places.filter(p => p.category === 'hotel').length}泊${places.filter(p => p.category === 'hotel').length + 1}日`
                 : "日帰り"}
-            </div>
-          </div>
-          {/* Progress */}
-          <div className="px-4 py-2 bg-gray-50 border-b">
-            <div className="flex gap-1">
-              {places.map((_, idx) => (
-                <div
-                  key={idx}
-                  className={`flex-1 h-2 rounded-full ${
-                    idx < currentIndex ? "bg-emerald-500" :
-                    idx === currentIndex ? "bg-blue-500" :
-                    "bg-gray-200"
-                  }`}
-                />
-              ))}
             </div>
           </div>
           {/* Left-Right Split */}
