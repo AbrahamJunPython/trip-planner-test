@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Classify error:", error);
     return NextResponse.json(
-      { category: "visit", name: "", address: "" },
+      { category: "visit", name: "", prefecture: "", address: "", pasted_url: null, corrected_url: null },
       { status: 200 }
     );
   }

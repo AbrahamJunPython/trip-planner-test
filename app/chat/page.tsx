@@ -224,54 +224,71 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Place Card */}
-          <a
-            href={currentPlace.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block border-2 border-emerald-500 rounded-2xl p-4 bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <div className="text-3xl">{iconMap[currentPlace.category] || "📍"}</div>
-              <div className="flex-1">
-                <div className="font-bold text-base">{currentPlace.name}</div>
-                {currentPlace.address && (
-                  <div className="text-xs text-gray-600">{currentPlace.address}</div>
+          {/* Left-Right Split */}
+          <div className="flex gap-4">
+            {/* Left Half - AI Image */}
+            <div className="w-1/2 flex justify-center items-center">
+              <Image
+                src={isLoading ? "/consider.png" : "/comeup.png"}
+                alt="AI"
+                width={200}
+                height={200}
+                className="rounded-full"
+              />
+            </div>
+
+            {/* Right Half */}
+            <div className="w-1/2 space-y-4">
+              {/* Place Card */}
+              <a
+                href={currentPlace.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block border-2 border-gray-300 rounded-2xl p-4 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-3xl">{iconMap[currentPlace.category] || "📍"}</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-base">{currentPlace.name}</div>
+                    {currentPlace.address && (
+                      <div className="text-xs text-gray-600">{currentPlace.address}</div>
+                    )}
+                  </div>
+                </div>
+              </a>
+
+              {/* URL Buttons */}
+              <div className="space-y-2">
+                <a
+                  href={currentPlace.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full py-3 px-4 bg-blue-500 text-white rounded-2xl text-sm font-bold hover:bg-blue-600 text-center"
+                >
+                  📋 貼り付けたURL
+                </a>
+                {currentPlace.officialUrl && currentPlace.officialUrl !== currentPlace.url && (
+                  <a
+                    href={currentPlace.officialUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full py-3 px-4 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600 text-center"
+                  >
+                    ✓ 修正されたURL
+                  </a>
                 )}
               </div>
             </div>
-          </a>
+          </div>
 
           {/* AI Response */}
           {isLoading ? (
-            <div className="bg-gray-100 rounded-2xl p-8 flex gap-4 min-h-[300px]">
-              <div className="w-1/2 flex justify-center items-center">
-                <Image
-                  src="/consider.png"
-                  alt="考え中"
-                  width={120}
-                  height={120}
-                  className="rounded-full"
-                />
-              </div>
-              <div className="w-1/2 flex items-center">
-                <div className="text-sm text-gray-500">考え中・・・</div>
-              </div>
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <div className="text-sm text-gray-500">考え中・・・</div>
             </div>
           ) : currentPlace.description ? (
-            <div className="bg-gray-100 rounded-2xl p-8 flex gap-4 min-h-[300px]">
-              <div className="w-1/2 flex justify-center items-center">
-                <Image
-                  src="/comeup.png"
-                  alt="AI"
-                  width={120}
-                  height={120}
-                  className="rounded-full"
-                />
-              </div>
-              <div className="w-1/2">
-                <div className="text-xs whitespace-pre-wrap">{currentPlace.description}</div>
-              </div>
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <div className="text-sm whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
 
