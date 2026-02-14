@@ -317,7 +317,7 @@ export default function ChatPage() {
             </div>
           ) : currentPlace.description ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div style={{fontSize: '12px'}} className="whitespace-pre-wrap">{currentPlace.description}</div>
+              <div style={{fontSize: '11px'}} className="whitespace-pre-wrap">{currentPlace.description}</div>
             </div>
           ) : null}
           {/* Actions */}
