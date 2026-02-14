@@ -323,7 +323,7 @@ export default function ChatPage() {
           ) : null}
           {/* Actions */}
           {!isLoading && currentPlace.description && (
-            <div className="border-t px-4 py-4">
+            <div className="px-4 py-4">
               <div className="flex gap-4">
                 <button
                   onClick={handleDelete}
