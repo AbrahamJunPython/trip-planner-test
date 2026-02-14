@@ -4,6 +4,7 @@ JSON形式で返してください:
 {
   "category": "visit" | "food" | "hotel" | "move",
   "name": "施設名",
+  "prefecture": "都道府県",
   "address": "正確な番地までの住所"、番地までわからない場合は楽天トラベル(https://travel.rakuten.co.jp/)で調査してください。,
   "pasted_url": "元のURL",
   "corrected_url": "公式サイト等の正しいURL"、わからない場合は楽天トラベル(https://travel.rakuten.co.jp/)で調査してください。

@@ -28,6 +28,8 @@ export default function ChatPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [context, setContext] = useState<{ depart: string | null; ogpItems: any[] }>({ depart: null, ogpItems: [] });
+  const [tripName, setTripName] = useState("新しい旅行");
+  const [isEditingTripName, setIsEditingTripName] = useState(false);
 
   useEffect(() => {
     const savedData = sessionStorage.getItem("trip_form_data");
@@ -44,6 +46,7 @@ export default function ChatPage() {
         
         setPlaces(sorted.map(p => ({ ...p, confirmed: false })));
         setContext({ depart: data.departSelected || null, ogpItems: data.ogpItems || [] });
+        setTripName(data.tripName || "新しい旅行");
       } catch {
         router.push("/plan");
       }
@@ -131,6 +134,7 @@ export default function ChatPage() {
       data.classifiedPlaces = places.filter(p => p.confirmed).map(({ url, category, name, address }) => ({
         url, category, name, address
       }));
+      data.tripName = tripName;
       sessionStorage.setItem("trip_form_data", JSON.stringify(data));
     }
     router.push("/plan");
@@ -171,13 +175,6 @@ export default function ChatPage() {
           >
             ← 保存して戻る
           </button>
-          <Image
-            src="/cocoico-ai.png"
-            alt="cocoico"
-            width={80}
-            height={80}
-            priority
-          />
           <div className="text-sm text-gray-500">
             {currentIndex + 1} / {places.length}
           </div>
@@ -201,6 +198,32 @@ export default function ChatPage() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+          {/* Trip Name */}
+          <div>
+            {isEditingTripName ? (
+              <input
+                value={tripName}
+                onChange={(e) => setTripName(e.target.value)}
+                onBlur={() => setIsEditingTripName(false)}
+                onKeyDown={(e) => e.key === 'Enter' && setIsEditingTripName(false)}
+                className="text-lg font-bold bg-transparent border-b-2 border-emerald-500 outline-none w-full"
+                autoFocus
+              />
+            ) : (
+              <h2
+                onClick={() => setIsEditingTripName(true)}
+                className="text-lg font-bold cursor-pointer hover:text-emerald-600"
+              >
+                {tripName}
+              </h2>
+            )}
+            <div className="mt-1 text-xs text-gray-500">
+              {places.filter(p => p.category === 'hotel').length > 0
+                ? `${places.filter(p => p.category === 'hotel').length}泊${places.filter(p => p.category === 'hotel').length + 1}日`
+                : "日帰り"}
+            </div>
+          </div>
+
           {/* Place Card */}
           <a
             href={currentPlace.url}
