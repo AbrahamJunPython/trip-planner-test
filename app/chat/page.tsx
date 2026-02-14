@@ -221,32 +221,32 @@ export default function ChatPage() {
 
           {/* AI Response */}
           {isLoading ? (
-            <div className="bg-gray-100 rounded-2xl p-4 flex gap-4">
-              <div className="flex-shrink-0">
+            <div className="bg-gray-100 rounded-2xl p-8 flex gap-4 min-h-[300px]">
+              <div className="w-1/2 flex justify-center items-center">
                 <Image
                   src="/consider.png"
                   alt="考え中"
-                  width={60}
-                  height={60}
+                  width={120}
+                  height={120}
                   className="rounded-full"
                 />
               </div>
-              <div className="flex-1 flex items-center">
-                <div className="text-sm text-gray-500">情報を取得中...</div>
+              <div className="w-1/2 flex items-center">
+                <div className="text-sm text-gray-500">考え中・・・</div>
               </div>
             </div>
           ) : currentPlace.description ? (
-            <div className="bg-gray-100 rounded-2xl p-4 flex gap-4">
-              <div className="flex-shrink-0">
+            <div className="bg-gray-100 rounded-2xl p-8 flex gap-4 min-h-[300px]">
+              <div className="w-1/2 flex justify-center items-center">
                 <Image
                   src="/comeup.png"
                   alt="AI"
-                  width={60}
-                  height={60}
+                  width={120}
+                  height={120}
                   className="rounded-full"
                 />
               </div>
-              <div className="flex-1">
+              <div className="w-1/2">
                 <div className="text-xs whitespace-pre-wrap">{currentPlace.description}</div>
               </div>
             </div>
