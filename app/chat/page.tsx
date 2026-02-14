@@ -227,7 +227,7 @@ export default function ChatPage() {
           {/* Left-Right Split */}
           <div className="flex gap-4">
             {/* Left Half - AI Image */}
-            <div className="w-1/2 flex justify-center items-center">
+            <div className="w-1/3 flex justify-center items-center">
               <Image
                 src={isLoading ? "/consider.png" : "/comeup.png"}
                 alt="AI"
@@ -238,7 +238,7 @@ export default function ChatPage() {
             </div>
 
             {/* Right Half */}
-            <div className="w-1/2 space-y-4">
+            <div className="w-2/3 space-y-4">
               {/* Place Card */}
               <a
                 href={currentPlace.url}
@@ -251,7 +251,7 @@ export default function ChatPage() {
                   <div className="flex-1">
                     <div className="font-bold text-sm">{currentPlace.name}</div>
                     {currentPlace.address && (
-                      <div style={{fontSize: '10px'}} className="text-gray-500">{currentPlace.address}</div>
+                      <div style={{fontSize: '5px'}} className="text-gray-500">{currentPlace.address}</div>
                     )}
                   </div>
                 </div>
