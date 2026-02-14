@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     
     console.log("[calculate-trip-days] Received body:", JSON.stringify(body, null, 2));
 
-    if (!departCoords || !classifiedPlaces || !Array.isArray(classifiedPlaces)) {
+    if (!classifiedPlaces || !Array.isArray(classifiedPlaces)) {
       console.log("[calculate-trip-days] Invalid input - returning default");
       return NextResponse.json({ tripDays: 1, stayDays: 0 });
     }

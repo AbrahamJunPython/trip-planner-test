@@ -181,6 +181,7 @@ export default function PlanPage() {
         setShowDetails(data.showDetails || false);
         setDepartMode(data.departMode || "postal");
         setDepartSelected(data.departSelected || null);
+        setDepartCoords(data.departCoords || null);
       } catch {
         // ignore
       }
@@ -402,9 +403,12 @@ export default function PlanPage() {
         age,
         showDetails,
         departMode,
-        departSelected
+        departSelected,
+        departCoords
       };
       sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
+
+      console.log("[generate] departCoords:", departCoords);
 
       // Try fast preset API first
       const phaseTimer1 = setTimeout(() => setLoadingPhase("rules"), 1000);
@@ -534,6 +538,7 @@ export default function PlanPage() {
                     onClick={() => {
                         setDepartSelected(null);
                         setDepartInput("");
+                        setDepartCoords(null);
                     }}
                     className="h-8 w-10 text-xs text-white bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center"
                     >
