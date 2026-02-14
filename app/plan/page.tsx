@@ -815,9 +815,9 @@ function PlaceCard({ place, onRemove }: { place: {url: string; category: string;
       rel="noreferrer"
       className="border border-gray-200 rounded-2xl p-3 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors relative"
     >
-      <div className="text-2xl">{iconMap[place.category] || "📍"}</div>
+      <div className="text-xl">{iconMap[place.category] || "📍"}</div>
       <div className="flex-1 min-w-0">
-        <div className="font-bold truncate">{place.name}</div>
+        <div className="font-bold text-sm truncate">{place.name}</div>
         {place.address && (
           <div className="text-xs text-gray-500 truncate">{place.address}</div>
         )}
