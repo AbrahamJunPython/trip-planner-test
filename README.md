@@ -1,149 +1,116 @@
-# 旅行工程ジェネレーター（MVP）
+# Trip Planner Test
 
-東京発・王道・複数人向けの旅行工程をAIが70%完成度で言い切るWebツール。
+旅行プラン作成アプリ（Next.js / TypeScript）です。  
+`/plan` で条件入力・URL貼り付け、`/chat` でAI相談、`/task` で予約導線、`/result` で旅程表示と共有ができます。
 
-## 概要
+## 主な機能
+- OGP取得: URLからタイトル・説明・画像などを抽出（`/api/ogp`）
+- 施設分類: OGPをもとにカテゴリ/住所などを分類（`/api/classify-place`）
+- Geocode: 住所から緯度経度を補完（`/api/geocode`）
+- チャット補助: 施設ごとに説明文を生成（`/api/chat`）
+- 旅程生成: 旅程JSONの生成と補完（`/api/generate`, `/api/fill`, `/api/generate-stream`）
+- 共有URL: 旅程の保存・取得（`/api/share`）
+- クライアントイベントログ: `page_view`, `start_button_click`, `ai_consult_click`, `item_stage`, `ai_consult_snapshot`, `reservation_click`（`/api/client-log`）
 
-幹事が「行き先まで言い切った」70%完成の叩き台を作成するNext.jsアプリケーション。
-飯は王道、時間ラフは外さない、複数人でも無理のない旅行プランを生成します。
+## 画面構成
+- `/` ホーム
+- `/plan` 条件入力・URL管理
+- `/chat` AI相談
+- `/task` タスク/予約導線
+- `/result` 生成結果表示・共有
 
-### 特徴
-- **行き先**: 1つに言い切り（候補は出さない）
-- **予算**: 円で1つの明確な金額
-- **工程**: 移動時間・滞在目安つき
-- **飯**: 1日1軒、具体的な店名（王道・老舗・定番のみ）
-- **完成度**: 70%（後で人が直せる余白を残す）
+## APIエンドポイント（主要）
+- `POST /api/ogp`
+- `POST /api/classify-place`
+- `POST /api/geocode`
+- `POST /api/reverse-geocode`
+- `POST /api/chat`
+- `POST /api/generate`
+- `POST /api/generate-stream`
+- `POST /api/fill`
+- `GET|POST /api/share`
+- `POST /api/client-log`
+- `GET /api/health`
+- `POST /api/calculate-trip-days`
 
-## 技術スタック
+## ログ設計（現状）
+- クライアントイベントは `/api/client-log` に集約
+- `session_id`, `user_id`, `device_id`, `eventType` を送信
+- URL単位追跡用に `item_id`、フロー追跡用に `flow_id` を利用
+- サーバーログは `app/lib/logger.ts` からAWS Lambdaへ転送可能
+- AWS転送は以下を中心に送信:
+  - `/api/client-log` の主要イベント（info）
+  - 各APIの warn/error
+- AWS転送時に `aws_meta`（分類メタ）を付与
 
-- **フレームワーク**: Next.js 16.1.6
-- **言語**: TypeScript 5.4.5
-- **ランタイム**: React 18.3.1
-- **AI**: OpenAI API (GPT-4o-mini)
-- **スタイリング**: Tailwind CSS
-- **日付処理**: date-fns, react-day-picker
-- **OGP取得**: cheerio
+## 必要な環境変数
 
-## プロジェクト構造
+### 必須
+- `OPENAI_API_KEY`
 
-```
-trip-planner-mvp/
-├── app/
-│   ├── api/
-│   │   ├── generate/
-│   │   │   └── route.ts          # OpenAI API呼び出し
-│   │   └── ogp/
-│   │       ├── route.ts          # OGP取得API
-│   │       ├── oembed.ts         # SNS oEmbed処理
-│   │       └── provider.ts       # プロバイダー判定
-│   ├── plan/
-│   │   └── page.tsx              # プラン入力ページ
-│   ├── result/
-│   │   └── page.tsx              # 結果表示ページ
-│   ├── layout.tsx                # ルートレイアウト
-│   ├── page.tsx                  # ホームページ
-│   └── types.ts                  # 型定義
-├── public/
-│   └── cocoico-ai.png            # ロゴ画像
-├── .env.local.template           # 環境変数テンプレート
-├── .gitignore                    # Git除外設定
-├── next.config.js                # Next.js設定
-├── package.json                  # 依存関係
-├── tailwind.config.js            # Tailwind設定
-├── tsconfig.json                 # TypeScript設定
-├── vercel.json                   # Vercelデプロイ設定
-├── DEPLOY.md                     # デプロイ手順
-└── README.md
-```
+### 生成系Lambda連携（任意）
+- `AWS_LAMBDA_GENERATE_URL`
+- `AWS_S3_ACCESS_KEY`
+- `AWS_S3_SECRET`
+
+### ログ転送Lambda連携（任意）
+- `AWS_LOG_LAMBDA_URL`
+- `AWS_S3_ACCESS_KEY`
+- `AWS_S3_SECRET`
+- `AWS_LOG_LAMBDA_TIMEOUT_MS`（default: `15000`）
+- `AWS_LOG_LAMBDA_RETRIES`（default: `2`）
+- `AWS_LOG_LAMBDA_COOLDOWN_MS`（default: `60000`）
+- `AWS_LOG_LAMBDA_INFO_DEDUPE_WINDOW_MS`（default: `5000`）
+- `AWS_LOG_SLOW_THRESHOLD_MS`（default: `3000`）
+
+### OGP（Instagram oEmbed, 任意）
+- `META_APP_ID`
+- `META_APP_SECRET`
+
+### 共有ストレージ（任意）
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
 ## セットアップ
-
-### 1. 依存関係のインストール
 ```bash
 npm install
 ```
 
-### 2. 環境変数の設定
-`.env.local`ファイルを作成し、OpenAI APIキーを設定：
-```bash
-cp .env.local.template .env.local
-```
+`.env.local` を作成して必要な環境変数を設定してください。
 
-`.env.local`を編集：
-```
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-⚠️ **重要**: `.env.local`ファイルは絶対にGitにコミットしないでください
-
-### 3. 開発サーバーの起動
+## 開発
 ```bash
 npm run dev
 ```
 
-http://localhost:3000 でアプリケーションにアクセスできます。
+- App: `http://localhost:3000`
 
-## 使用方法
-
-1. **旅行名入力**
-   - 旅行の名前を入力（デフォルト: 新しい旅行）
-
-2. **行き先設定**
-   - テキスト入力、またはURLから行き先情報を取得
-
-3. **日程選択**
-   - カレンダーから出発日と帰着日を選択
-   - 日帰りも可能
-
-4. **人数・同行者・予算感**
-   - 人数: 1〜10人以上
-   - 同行者: 一人旅、カップル、友達同士、子供連れ、家族旅行、その他
-   - 予算感: 5段階から選択
-
-5. **生成実行**
-   - 「ラフプラン生成」ボタンをクリック
-   - AIが行き先・予算・詳細工程を生成
-
-## 出力フォーマット
-
-- **行き先**: 具体的なエリア名で言い切り
-- **推奨予算**: 1人あたりの総額（円）
-- **選定理由**: 短文3点
-- **旅行工程**: 日別の詳細スケジュール（時間ラフ付き）
-- **注意書き**: 飲食店変更時の対応方針
-
-## 開発・デプロイ
-
-### ビルド
+## 品質チェック
 ```bash
-npm run build
+npm run type-check
+npm run lint
+npm test -- --run
 ```
 
-### 本番起動
+## ビルド/起動
 ```bash
+npm run build
 npm start
 ```
 
-### Vercelデプロイ
-詳細は [DEPLOY.md](./DEPLOY.md) を参照してください。
+## 主要スクリプト
+- `npm run dev`
+- `npm run build`
+- `npm run start`
+- `npm run lint`
+- `npm run type-check`
+- `npm run test`
+- `npm run format`
 
-簡易手順：
-1. Vercelアカウントでプロジェクトをインポート
-2. Environment Variablesに`OPENAI_API_KEY`を設定
-3. デプロイ実行
+## デプロイ
+- Vercel前提。詳細は `DEPLOY.md` を参照してください。
 
-## セキュリティ
+## 補足ドキュメント
+- `DEPLOY.md` デプロイ手順
+- `LOG_DESIGN_AUDIT_2026-02-15.md` ログ設計監査結果
 
-- APIキーは環境変数で管理
-- SSRF対策実装済み（OGP取得時）
-- プライベートネットワークへのアクセス制限
-- HTTPS通信のみ許可
-- セキュリティヘッダー設定済み
-
-## 今後の改善予定
-
-- 実使用ベースでの機能改善
-- 行き先選択肢の拡充
-- 予算精度の向上
-- ユーザーフィードバック機能
-- レスポンシブデザインの最適化
