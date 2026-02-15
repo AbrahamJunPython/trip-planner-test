@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { getAllHealthStatuses } from "@/app/lib/health-check";
 import { getCircuitBreakerState } from "@/app/lib/circuit-breaker";
 import { getCache } from "@/app/lib/cache";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("/api/health");
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const startTime = Date.now();
+  logger.info("Health check request received");
   const healthStatuses = getAllHealthStatuses();
   
   // Circuit breaker states
@@ -38,7 +43,7 @@ export async function GET() {
     ? "degraded"
     : "healthy";
 
-  return NextResponse.json({
+  const response = {
     status: overallStatus,
     timestamp: new Date().toISOString(),
     checks: healthStatuses,
@@ -48,5 +53,14 @@ export async function GET() {
       nodeEnv: process.env.NODE_ENV,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
     },
+  };
+
+  logger.info("Health check response generated", {
+    duration: `${Date.now() - startTime}ms`,
+    status: overallStatus,
+    circuitBreakers,
+    cacheStats,
   });
+
+  return NextResponse.json(response);
 }

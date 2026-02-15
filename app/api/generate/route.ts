@@ -1,7 +1,9 @@
 // app/api/generate/route.ts
 import { NextResponse } from "next/server";
+import { createLogger } from "@/app/lib/logger";
 
 export const runtime = "nodejs";
+const logger = createLogger("/api/generate");
 
 /* =====================
  * utils
@@ -266,8 +268,10 @@ ${skeletonBlock}
 }
 
 async function callOpenAIChat(apiKey: string, prompt: string, maxTokens: number) {
-  console.log("[DEBUG] Starting OpenAI API call");
-  console.log("[DEBUG] Prompt length:", prompt.length);
+  logger.info("Generate OpenAI call started", {
+    promptLength: prompt.length,
+    maxTokens,
+  });
   
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -285,7 +289,7 @@ async function callOpenAIChat(apiKey: string, prompt: string, maxTokens: number)
         },
         { role: "user", content: prompt },
       ],
-      max_tokens: 2000,
+      max_tokens: maxTokens,
       temperature: 0.1,
     }),
   });
@@ -293,28 +297,28 @@ async function callOpenAIChat(apiKey: string, prompt: string, maxTokens: number)
   const json = await r.json().catch(() => ({ error: { message: "Invalid JSON from OpenAI" } }));
   if (!r.ok) {
     const msg = json?.error?.message || `HTTP ${r.status}: ${r.statusText}`;
-    console.error("[ERROR] OpenAI API error:", msg);
+    logger.error("Generate OpenAI API error", new Error(msg), { status: r.status });
     throw new Error(msg);
   }
 
   const text = json?.choices?.[0]?.message?.content;
   if (!text) {
-    console.error("[ERROR] No content from OpenAI");
+    logger.error("Generate OpenAI returned empty content");
     throw new Error("No content received from OpenAI");
   }
 
-  console.log("[DEBUG] Raw OpenAI response length:", text.length);
-  console.log("[DEBUG] Raw response (first 500 chars):", text.substring(0, 500));
-
   try {
     const raw = extractJson(String(text));
-    console.log("[DEBUG] Extracted JSON length:", raw.length);
+    logger.info("Generate OpenAI response parsed", {
+      rawLength: raw.length,
+      responsePreview: raw.substring(0, 200),
+    });
     const result = JSON.parse(raw);
-    console.log("[DEBUG] JSON parse successful");
     return result;
   } catch (parseError) {
-    console.error("[ERROR] JSON Parse failed:", parseError);
-    console.error("[ERROR] Full raw text:", text);
+    logger.error("Generate JSON parse failed", parseError as Error, {
+      rawPreview: text.slice(0, 300),
+    });
     const err: any = new Error(`Invalid JSON: ${parseError.message}`);
     err.rawOutput = text;   // ← ここ重要
     throw err;
@@ -325,18 +329,33 @@ async function callOpenAIChat(apiKey: string, prompt: string, maxTokens: number)
  * handler (PHASE1)
  ===================== */
 export async function POST(req: Request) {
+  const startTime = Date.now();
   try {
     const body = await req.json().catch(() => null);
-    if (!body) return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 });
+    if (!body) {
+      logger.warn("Generate request invalid JSON");
+      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 });
+    }
+
+    logger.info("Generate request received", {
+      tripName: body?.tripName ?? null,
+      departType: body?.depart?.type ?? null,
+      hasDestinationArray: Array.isArray(body?.destination),
+      startDate: body?.startDate ?? null,
+      tripDays: body?.tripDays ?? null,
+      stayDays: body?.stayDays ?? null,
+    });
 
     const departType = body?.depart?.type;
     const departValue = body?.depart?.value;
     if (!isNonEmptyString(departType) || !isNonEmptyString(departValue)) {
+      logger.warn("Generate request rejected: missing depart", { departType, departValue });
       return NextResponse.json({ error: "depart.type と depart.value は必須です" }, { status: 400 });
     }
 
     const startDate = body?.startDate;
     if (!isNonEmptyString(startDate)) {
+      logger.warn("Generate request rejected: missing startDate");
       return NextResponse.json({ error: "startDate は必須です" }, { status: 400 });
     }
 
@@ -345,12 +364,14 @@ export async function POST(req: Request) {
       (destFormatted.kind === "text" && isNonEmptyString(destFormatted.text)) ||
       (destFormatted.kind === "ogp" && destFormatted.ogps.length > 0);
     if (!hasDest) {
+      logger.warn("Generate request rejected: missing destination");
       return NextResponse.json({ error: "destination は必須です（テキスト or OGP配列）" }, { status: 400 });
     }
 
     // ✅ MUST: env key only（直書き禁止）
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+      logger.error("OPENAI_API_KEY missing for generate endpoint");
       return NextResponse.json(
         { error: "OPENAI_API_KEY が未設定です（VercelのEnvironment Variablesに設定してください）" },
         { status: 500 }
@@ -363,22 +384,31 @@ export async function POST(req: Request) {
     const itinerary = await callOpenAIChat(apiKey, prompt, 900);
 
     if (!itinerary || typeof itinerary !== "object") {
+      logger.warn("Generate returned non-object itinerary", { itineraryType: typeof itinerary });
       return NextResponse.json({ error: "AI returned non-object JSON", raw: itinerary }, { status: 500 });
     }
     if (!Array.isArray(itinerary.days)) itinerary.days = [];
     if (!Array.isArray(itinerary.warnings)) itinerary.warnings = [];
 
     itinerary._meta = { stage: "outline" };
+    logger.info("Generate response generated", {
+      duration: `${Date.now() - startTime}ms`,
+      tripName: itinerary.tripName ?? null,
+      dayCount: Array.isArray(itinerary.days) ? itinerary.days.length : 0,
+      warningCount: Array.isArray(itinerary.warnings) ? itinerary.warnings.length : 0,
+    });
 
     return NextResponse.json({ itinerary });
     } catch (e: any) {
-      console.error("API Error:", e);
+      logger.error("Generate API error", e as Error, {
+        duration: `${Date.now() - startTime}ms`,
+      });
 
       // ★ 追加：OpenAIの生レスポンスをログに出す
       if (typeof e?.rawOutput === "string") {
-        console.error("---- OpenAI RAW OUTPUT (head 300) ----");
-        console.error(e.rawOutput.slice(0, 300));
-        console.error("--------------------------------------");
+        logger.warn("Generate OpenAI raw output preview", {
+          rawOutputPreview: e.rawOutput.slice(0, 300),
+        });
       }
 
       return NextResponse.json(

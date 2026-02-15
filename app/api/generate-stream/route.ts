@@ -1,4 +1,7 @@
 import { NextRequest } from "next/server";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("/api/generate-stream");
 
 // Preset templates for common destinations
 const PRESET_TEMPLATES = {
@@ -116,13 +119,26 @@ async function generateWithPreset(input: any, preset: any): Promise<any> {
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   try {
     const body = await req.json();
+    logger.info("Generate-stream request received", {
+      tripName: body?.tripName ?? null,
+      hasDestinationArray: Array.isArray(body?.destination),
+      tripDays: body?.tripDays ?? null,
+      stayDays: body?.stayDays ?? null,
+    });
 
     const detectedDest = detectDestination(body);
     if (detectedDest && PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES]) {
       const preset = PRESET_TEMPLATES[detectedDest as keyof typeof PRESET_TEMPLATES];
       const result = await generateWithPreset(body, preset);
+      logger.info("Generate-stream preset matched", {
+        duration: `${Date.now() - startTime}ms`,
+        detectedDest,
+        tripDays: result.tripDays,
+        stayDays: result.stayDays,
+      });
 
       const stream = new ReadableStream({
         start(controller) {
@@ -145,6 +161,10 @@ export async function POST(req: NextRequest) {
     }
 
     // fallback（/api/generate がSSEならそのまま中継）
+    logger.info("Generate-stream fallback to /api/generate", {
+      detectedDest,
+      duration: `${Date.now() - startTime}ms`,
+    });
     const upstream = await fetch(new URL("/api/generate", req.url), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -154,8 +174,19 @@ export async function POST(req: NextRequest) {
     // upstreamのエラーを握りつぶさない（重要）
     if (!upstream.ok) {
       const t = await upstream.text();
+      logger.warn("Generate-stream upstream returned error", {
+        status: upstream.status,
+        duration: `${Date.now() - startTime}ms`,
+        bodyPreview: t.slice(0, 200),
+      });
       return new Response(t, { status: upstream.status, headers: { "Content-Type": "application/json" } });
     }
+
+    logger.info("Generate-stream upstream success", {
+      status: upstream.status,
+      contentType: upstream.headers.get("content-type"),
+      duration: `${Date.now() - startTime}ms`,
+    });
 
     return new Response(upstream.body, {
       status: 200,
@@ -165,7 +196,10 @@ export async function POST(req: NextRequest) {
         Connection: "keep-alive",
       },
     });
-  } catch {
+  } catch (error) {
+    logger.error("Generate-stream failed", error as Error, {
+      duration: `${Date.now() - startTime}ms`,
+    });
     return Response.json({ error: "Generation failed" }, { status: 500 });
   }
 }

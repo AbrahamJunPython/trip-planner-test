@@ -1,7 +1,9 @@
 // app/api/fill/route.ts
 import { NextResponse } from "next/server";
+import { createLogger } from "@/app/lib/logger";
 
 export const runtime = "nodejs";
+const logger = createLogger("/api/fill");
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -176,21 +178,36 @@ async function callOpenAIChat(apiKey: string, prompt: string, maxTokens: number)
  * handler (PHASE2)
  ===================== */
 export async function POST(req: Request) {
+  const startTime = Date.now();
   try {
     const body = await req.json().catch(() => null);
-    if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    if (!body) {
+      logger.warn("Fill request has invalid JSON");
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    logger.info("Fill request received", {
+      dayIndex: body?.dayIndex ?? null,
+      kind: body?.kind ?? null,
+      areaTitle: body?.areaTitle ?? null,
+      hasDestinationHint: Boolean(body?.destinationHint),
+      hasPreviousVisits: Boolean(body?.previousVisits),
+    });
 
     const kind = body?.kind;
     if (!["visit", "food", "hotel", "move"].includes(kind)) {
+      logger.warn("Fill request rejected: invalid kind", { kind });
       return NextResponse.json({ error: "kind must be one of visit|food|hotel|move" }, { status: 400 });
     }
 
     if (!isNonEmptyString(body?.areaTitle)) {
+      logger.warn("Fill request rejected: missing areaTitle");
       return NextResponse.json({ error: "areaTitle is required (phase1 day/title etc.)" }, { status: 400 });
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+      logger.error("OPENAI_API_KEY missing for fill endpoint");
       return NextResponse.json(
         { error: "OPENAI_API_KEY が未設定です（VercelのEnvironment Variablesに設定してください）" },
         { status: 500 }
@@ -202,6 +219,7 @@ export async function POST(req: Request) {
     const filledItem = await callOpenAIChat(apiKey, prompt, 420);
 
     if (!filledItem || typeof filledItem !== "object") {
+      logger.warn("Fill response invalid JSON object", { filledItemType: typeof filledItem });
       return NextResponse.json({ error: "AI returned non-object JSON", raw: filledItem }, { status: 500 });
     }
 
@@ -211,9 +229,20 @@ export async function POST(req: Request) {
     if (!("url" in filledItem)) filledItem.url = null;
     if (!("time" in filledItem)) filledItem.time = null;
 
+    logger.info("Fill response generated", {
+      duration: `${Date.now() - startTime}ms`,
+      dayIndex: body?.dayIndex ?? null,
+      kind,
+      title: filledItem.title,
+      hasDetail: Boolean(filledItem.detail),
+      budgetPerPerson: filledItem.budgetPerPerson,
+    });
+
     return NextResponse.json({ item: filledItem });
     } catch (e: any) {
-      console.error("API Error:", e);
+      logger.error("Fill API error", e as Error, {
+        duration: `${Date.now() - startTime}ms`,
+      });
       return NextResponse.json(
         { error: e?.message || "Internal server error", hint: "Check OpenAI raw output in logs." },
         { status: 500 }

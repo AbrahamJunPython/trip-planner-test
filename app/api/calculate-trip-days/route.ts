@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("/api/calculate-trip-days");
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // 地球の半径（km）
@@ -26,12 +29,22 @@ function getPlaceCoords(place: Record<string, unknown>): { lat: number; lon: num
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   try {
     const body = await req.json();
     const { departCoords, classifiedPlaces } = body;
+    logger.info("Trip-days request received", {
+      hasDepartCoords: Boolean(departCoords),
+      classifiedPlacesCount: Array.isArray(classifiedPlaces) ? classifiedPlaces.length : 0,
+    });
 
     if (!classifiedPlaces || !Array.isArray(classifiedPlaces)) {
-      return NextResponse.json({ tripDays: 1, stayDays: 0 });
+      const fallback = { tripDays: 1, stayDays: 0 };
+      logger.warn("Invalid classifiedPlaces, returning fallback", {
+        duration: `${Date.now() - startTime}ms`,
+        result: fallback,
+      });
+      return NextResponse.json(fallback);
     }
 
     const places = classifiedPlaces.filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null);
@@ -81,10 +94,22 @@ export async function POST(req: NextRequest) {
     tripDays = Math.min(tripDays, 7);
     
     const stayDays = tripDays - 1;
+    logger.info("Trip-days response generated", {
+      duration: `${Date.now() - startTime}ms`,
+      visitCount,
+      hotelCount,
+      maxDistance,
+      tripDays,
+      stayDays,
+    });
 
     return NextResponse.json({ tripDays, stayDays });
   } catch (error) {
-    console.error("Calculate trip days error:", error);
-    return NextResponse.json({ tripDays: 1, stayDays: 0 });
+    const fallback = { tripDays: 1, stayDays: 0 };
+    logger.error("Calculate trip days error", error as Error, {
+      duration: `${Date.now() - startTime}ms`,
+      result: fallback,
+    });
+    return NextResponse.json(fallback);
   }
 }

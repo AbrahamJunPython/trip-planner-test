@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import type { Ogp } from "../../types";
+import { createLogger } from "@/app/lib/logger";
 import { detectProvider } from "./provider";
 import {
   fetchTikTokOembed,
   fetchInstagramOembed,
   fetchYouTubeOembed,
 } from "./oembed";
+
+const logger = createLogger("/api/ogp");
 
 function normalizeUrl(raw: string) {
   try {
@@ -41,30 +44,38 @@ function fallbackCard(url: string): Ogp {
   }
 }
 
+function summarizeResult(result: Ogp) {
+  return {
+    url: result.url,
+    provider: result.provider ?? "website",
+    title: result.title?.slice(0, 80) ?? null,
+    hasDescription: Boolean(result.description),
+    hasImage: Boolean(result.image),
+    siteName: result.siteName ?? null,
+  };
+}
+
 async function fetchHtml(url: string) {
   try {
-    // Validate URL format and security
     const parsedUrl = new URL(url);
-    
-    // Only allow HTTPS for security
-    if (parsedUrl.protocol !== 'https:') {
-      throw new Error('Only HTTPS URLs are allowed');
+
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error("Only HTTPS URLs are allowed");
     }
-    
-    // Block private/internal networks to prevent SSRF
+
     const hostname = parsedUrl.hostname;
     if (
-      hostname === 'localhost' ||
-      hostname.startsWith('127.') ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('192.168.') ||
+      hostname === "localhost" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
       hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
-      hostname.startsWith('169.254.') ||
-      hostname === '0.0.0.0'
+      hostname.startsWith("169.254.") ||
+      hostname === "0.0.0.0"
     ) {
-      throw new Error('Private network access not allowed');
+      throw new Error("Private network access not allowed");
     }
-    
+
     const res = await fetch(url, {
       headers: {
         "user-agent":
@@ -74,11 +85,13 @@ async function fetchHtml(url: string) {
       },
       cache: "no-store",
       redirect: "follow",
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: AbortSignal.timeout(10000),
     });
     return res;
   } catch (error) {
-    throw new Error(`Failed to fetch ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to fetch ${url}: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
   }
 }
 
@@ -92,8 +105,7 @@ async function scrapeOgp(url: string): Promise<Ogp> {
     });
     const $ = cheerio.load(html);
 
-    const og = (prop: string) =>
-      $(`meta[property="${prop}"]`).attr("content")?.trim();
+    const og = (prop: string) => $(`meta[property="${prop}"]`).attr("content")?.trim();
 
     const title =
       og("og:title") ||
@@ -123,7 +135,6 @@ async function scrapeOgp(url: string): Promise<Ogp> {
         }
       })();
 
-    // favicon（html内リンク優先）
     const iconHref =
       $("link[rel='icon']").attr("href") ||
       $("link[rel='shortcut icon']").attr("href") ||
@@ -134,60 +145,106 @@ async function scrapeOgp(url: string): Promise<Ogp> {
     if (iconHref) {
       try {
         favicon = new URL(iconHref, url).toString();
-      } catch {}
+      } catch {
+        logger.debug("Failed to normalize favicon URL", { url, iconHref });
+      }
     }
 
-    // 何も取れないなら最低限返す
     if (!title && !description && !image) return fallbackCard(url);
 
     return { url, title, description, image, siteName, favicon };
   } catch (error) {
-    console.error(`Error scraping OGP for ${url}:`, error);
+    logger.error(`Error scraping OGP for ${url}`, error as Error);
     return fallbackCard(url);
   }
 }
 
 export async function POST(req: Request) {
+  const startTime = Date.now();
+
   try {
     const body = await req.json().catch(() => null);
     const urls: string[] = Array.isArray(body?.urls) ? body.urls : [];
 
+    logger.info("OGP request received", {
+      inputUrlCount: urls.length,
+      inputUrls: urls,
+    });
+
     const cleaned = urls.map(normalizeUrl).filter((u): u is string => Boolean(u));
+    if (cleaned.length !== urls.length) {
+      logger.warn("Some URLs were dropped during normalization", {
+        inputUrlCount: urls.length,
+        normalizedUrlCount: cleaned.length,
+      });
+    }
 
     const results = await Promise.all(
       cleaned.map(async (url) => {
         try {
           const provider = detectProvider(url);
+          logger.info("Processing OGP URL", { url, provider });
 
-          // ★ SNSは oEmbed 優先
           if (provider === "youtube") {
             const o = await fetchYouTubeOembed(url);
-            if (o) return o;
+            if (o) {
+              logger.info("OGP URL processed via YouTube oEmbed", {
+                url,
+                result: summarizeResult(o),
+              });
+              return o;
+            }
           }
 
           if (provider === "tiktok") {
             const o = await fetchTikTokOembed(url);
-            if (o) return o;
+            if (o) {
+              logger.info("OGP URL processed via TikTok oEmbed", {
+                url,
+                result: summarizeResult(o),
+              });
+              return o;
+            }
           }
 
           if (provider === "instagram") {
             const o = await fetchInstagramOembed(url);
-            if (o) return o;
+            if (o) {
+              logger.info("OGP URL processed via Instagram oEmbed", {
+                url,
+                result: summarizeResult(o),
+              });
+              return o;
+            }
           }
 
-          // ★ ダメなら従来の scrape
-          const scraped = await scrapeOgp(url);
-          return { ...scraped, provider };
+          const scraped = { ...(await scrapeOgp(url)), provider };
+          logger.info("OGP URL processed via HTML scraping", {
+            url,
+            result: summarizeResult(scraped),
+          });
+          return scraped;
         } catch (error) {
-          console.error(`Error processing URL ${url}:`, error);
-          return fallbackCard(url);
+          const fallback = fallbackCard(url);
+          logger.error(`Error processing URL ${url}`, error as Error, {
+            fallback: summarizeResult(fallback),
+          });
+          return fallback;
         }
       })
     );
 
+    logger.info("OGP response generated", {
+      duration: `${Date.now() - startTime}ms`,
+      resultCount: results.length,
+      results: results.map(summarizeResult),
+    });
+
     return NextResponse.json({ results });
   } catch (error) {
-    console.error('POST request error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    logger.error("POST request error", error as Error, {
+      duration: `${Date.now() - startTime}ms`,
+    });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

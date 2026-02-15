@@ -1,4 +1,7 @@
 import type { Ogp } from "../../types";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("/api/ogp/oembed");
 
 /** YouTube URL正規化 */
 function normalizeYouTubeUrl(url: string): string | null {
@@ -33,6 +36,7 @@ export async function fetchYouTubeOembed(inputUrl: string): Promise<Ogp | null> 
   try {
     const url = normalizeYouTubeUrl(inputUrl);
     if (!url) return null;
+    logger.info("YouTube oEmbed request", { inputUrl, normalizedUrl: url });
 
     const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
 
@@ -40,11 +44,18 @@ export async function fetchYouTubeOembed(inputUrl: string): Promise<Ogp | null> 
       cache: "no-store",
       signal: AbortSignal.timeout(8000)
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn("YouTube oEmbed non-OK response", {
+        inputUrl,
+        normalizedUrl: url,
+        status: res.status,
+      });
+      return null;
+    }
 
     const data = (await res.json()) as any;
 
-    return {
+    const result: Ogp = {
       url: inputUrl,
       provider: "youtube",
       title: data?.title,
@@ -53,7 +64,14 @@ export async function fetchYouTubeOembed(inputUrl: string): Promise<Ogp | null> 
       siteName: "YouTube",
       favicon: "https://www.youtube.com/favicon.ico",
     };
+    logger.info("YouTube oEmbed success", {
+      inputUrl,
+      title: result.title ?? null,
+      hasImage: Boolean(result.image),
+    });
+    return result;
   } catch {
+    logger.warn("YouTube oEmbed failed", { inputUrl });
     return null;
   }
 }
@@ -96,17 +114,25 @@ async function resolveRedirect(url: string) {
 export async function fetchTikTokOembed(inputUrl: string): Promise<Ogp | null> {
   try {
     const url = await resolveRedirect(inputUrl);
+    logger.info("TikTok oEmbed request", { inputUrl, resolvedUrl: url });
 
     const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(
       url
     )}`;
 
     const res = await fetch(endpoint, { cache: "no-store" });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn("TikTok oEmbed non-OK response", {
+        inputUrl,
+        resolvedUrl: url,
+        status: res.status,
+      });
+      return null;
+    }
 
     const data = (await res.json()) as any;
 
-    return {
+    const result: Ogp = {
       url,
       provider: "tiktok",
       title: data?.title,
@@ -115,7 +141,15 @@ export async function fetchTikTokOembed(inputUrl: string): Promise<Ogp | null> {
       siteName: data?.provider_name ?? "TikTok",
       favicon: "https://www.tiktok.com/favicon.ico",
     };
+    logger.info("TikTok oEmbed success", {
+      inputUrl,
+      resolvedUrl: url,
+      title: result.title ?? null,
+      hasImage: Boolean(result.image),
+    });
+    return result;
   } catch {
+    logger.warn("TikTok oEmbed failed", { inputUrl });
     return null;
   }
 }
@@ -132,7 +166,11 @@ export async function fetchInstagramOembed(
 ): Promise<Ogp | null> {
   try {
     const token = getMetaToken();
-    if (!token) return null;
+    if (!token) {
+      logger.warn("Instagram oEmbed skipped (missing token)", { url });
+      return null;
+    }
+    logger.info("Instagram oEmbed request", { url });
 
     const endpoint =
       `https://graph.facebook.com/v24.0/instagram_oembed?` +
@@ -141,11 +179,17 @@ export async function fetchInstagramOembed(
       `&omitscript=true`;
 
     const res = await fetch(endpoint, { cache: "no-store" });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn("Instagram oEmbed non-OK response", {
+        url,
+        status: res.status,
+      });
+      return null;
+    }
 
     const data = (await res.json()) as any;
 
-    return {
+    const result: Ogp = {
       url,
       provider: "instagram",
       title: data?.title,
@@ -154,7 +198,14 @@ export async function fetchInstagramOembed(
       siteName: data?.provider_name ?? "Instagram",
       favicon: "https://www.instagram.com/favicon.ico",
     };
+    logger.info("Instagram oEmbed success", {
+      url,
+      title: result.title ?? null,
+      hasImage: Boolean(result.image),
+    });
+    return result;
   } catch {
+    logger.warn("Instagram oEmbed failed", { url });
     return null;
   }
 }
