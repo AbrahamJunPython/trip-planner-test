@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import type { Ogp } from "../types";
@@ -10,6 +10,7 @@ import type { DateRange } from "react-day-picker";
 import { useDebounce } from "../components/useDebounce";
 import { searchDepartCandidates } from "../lib/departSearch";
 import LoadingScreen from "../components/LoadingScreen";
+import { createFlowId, createItemIdFromUrl, normalizeTrackUrl } from "../lib/item-tracking";
 
 /* =====================
  * types
@@ -41,6 +42,16 @@ type DepartLocationInfo = {
 
 type Range = DateRange;
 
+type ClassifiedPlaceState = {
+  itemId: string;
+  url: string;
+  category: string;
+  name: string;
+  address: string;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
 type GeneratePayload = {
   tripName: string;
   depart: {
@@ -57,6 +68,31 @@ type GeneratePayload = {
   budget: Budget | null;
   gender: string | null;
   age: string | null;
+};
+
+const INTEGRATED_ITEMS_SCHEMA_VERSION = "1.0.0";
+
+type IntegratedItemLog = {
+  item_id: string;
+  normalized_url: string;
+  ogp: {
+    url: string;
+    title: string | null;
+    description: string | null;
+    image: string | null;
+    siteName: string | null;
+    favicon: string | null;
+    provider: string | null;
+  };
+  classify_place: {
+    category: string | null;
+    name: string | null;
+    address: string | null;
+  } | null;
+  geocode: {
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
 };
 
 // 生成APIの返却（例）
@@ -100,7 +136,7 @@ export default function PlanPage() {
   const [destinationText, setDestinationText] = useState("");
   const [ogpUrls, setOgpUrls] = useState<string[]>([]);
   const [ogpItems, setOgpItems] = useState<Ogp[]>([]);
-  const [classifiedPlaces, setClassifiedPlaces] = useState<Array<{url: string; category: string; name: string; address: string}>>([]);
+  const [classifiedPlaces, setClassifiedPlaces] = useState<ClassifiedPlaceState[]>([]);
   const [departCoords, setDepartCoords] = useState<{lat: number; lon: number} | null>(null);
   const [departLocationInfo, setDepartLocationInfo] = useState<DepartLocationInfo>({
     latitude: null,
@@ -130,10 +166,108 @@ export default function PlanPage() {
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<"premise" | "rules" | "format" | "slow">("premise");
+  const geocodeCacheRef = useRef<Map<string, { latitude: number | null; longitude: number | null }>>(new Map());
+  const geocodeInFlightRef = useRef<Set<string>>(new Set());
+  const hasLoggedPageViewRef = useRef(false);
+  const flowIdRef = useRef<string | null>(null);
 
   const debouncedDepartInput = useDebounce(departInput, 300);
   const inputClass = "mt-1 w-full rounded-2xl border border-gray-200 p-3 bg-white";
   const selectedClass = "mt-1 w-full rounded-2xl border border-gray-200 p-3 bg-white font-bold text-emerald-500";
+
+  const sendClientLog = (payload: {
+    eventType: "page_view" | "ai_consult_click" | "item_stage" | "ai_consult_snapshot";
+    page: string;
+    targetUrl?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    const createId = () => {
+      if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID();
+      }
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    };
+
+    const ensureId = (storage: Storage, key: string) => {
+      const existing = storage.getItem(key);
+      if (existing) return existing;
+      const created = createId();
+      storage.setItem(key, created);
+      return created;
+    };
+
+    let sessionId: string | null = null;
+    let userId: string | null = null;
+    let deviceId: string | null = null;
+    let flowId: string | null = flowIdRef.current;
+    if (typeof window !== "undefined") {
+      sessionId = ensureId(sessionStorage, "analytics_session_id");
+      userId = ensureId(localStorage, "analytics_user_id");
+      deviceId = ensureId(localStorage, "analytics_device_id");
+      const existingFlow = sessionStorage.getItem("plan_flow_id");
+      if (existingFlow) {
+        flowId = existingFlow;
+      } else {
+        flowId = createFlowId();
+        sessionStorage.setItem("plan_flow_id", flowId);
+      }
+      flowIdRef.current = flowId;
+    }
+
+    const body = JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+      referrer: typeof document !== "undefined" ? document.referrer || null : null,
+      session_id: sessionId,
+      user_id: userId,
+      device_id: deviceId,
+      flow_id: flowId,
+    });
+
+    try {
+      void fetch("/api/client-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    } catch {
+      // ignore logging errors on UI path
+    }
+  };
+
+  const ensureFlowId = () => {
+    if (typeof window === "undefined") return null;
+    if (flowIdRef.current) return flowIdRef.current;
+    const existingFlow = sessionStorage.getItem("plan_flow_id");
+    if (existingFlow) {
+      flowIdRef.current = existingFlow;
+      return existingFlow;
+    }
+    const createdFlow = createFlowId();
+    sessionStorage.setItem("plan_flow_id", createdFlow);
+    flowIdRef.current = createdFlow;
+    return createdFlow;
+  };
+
+  const logItemStage = (
+    stage: "ogp" | "classify_place" | "geocode",
+    status: "success" | "error",
+    item: { itemId: string; url: string },
+    metadata?: Record<string, unknown>
+  ) => {
+    sendClientLog({
+      eventType: "item_stage",
+      page: "/plan",
+      metadata: {
+        stage,
+        status,
+        item_id: item.itemId,
+        normalized_url: normalizeTrackUrl(item.url),
+        ...metadata,
+      },
+    });
+  };
 
   /* =====================
    * 行き先URL管理
@@ -152,7 +286,10 @@ export default function PlanPage() {
     fetch('/api/ogp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls: [debouncedUrl] })
+      body: JSON.stringify({
+        urls: [debouncedUrl],
+        flow_id: ensureFlowId(),
+      })
     }).catch(() => {});
   }, [debouncedUrl]);
 
@@ -169,6 +306,83 @@ export default function PlanPage() {
   const removeDestinationUrl = (urlToRemove: string) => {
     setOgpUrls(prev => prev.filter(url => url !== urlToRemove));
     setOgpItems(prev => prev.filter(item => item.url !== urlToRemove));
+    geocodeCacheRef.current.delete(urlToRemove);
+    geocodeInFlightRef.current.delete(urlToRemove);
+  };
+
+  const enrichClassifiedPlacesWithGeocode = async (places: ClassifiedPlaceState[]) => {
+    const targets = places.filter((place) => {
+      if (!place.address) return false;
+      if (place.latitude !== undefined || place.longitude !== undefined) return false;
+      if (place.category !== "visit" && place.category !== "hotel") return false;
+      if (geocodeInFlightRef.current.has(place.url)) return false;
+      return true;
+    });
+
+    if (targets.length === 0) return;
+
+    await Promise.all(
+      targets.map(async (place) => {
+        geocodeInFlightRef.current.add(place.url);
+        try {
+          const cached = geocodeCacheRef.current.get(place.url);
+          if (cached) {
+            setClassifiedPlaces((prev) =>
+              prev.map((item) =>
+                item.url === place.url
+                  ? { ...item, latitude: cached.latitude, longitude: cached.longitude }
+                  : item
+              )
+            );
+            return;
+          }
+
+      const response = await fetch("/api/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: place.address,
+            source_url: place.url,
+            item_id: place.itemId,
+            flow_id: ensureFlowId(),
+          }),
+      });
+      if (!response.ok) {
+        logItemStage("geocode", "error", { itemId: place.itemId, url: place.url }, {
+          status: response.status,
+        });
+        return;
+      }
+
+          const data = (await response.json().catch(() => ({}))) as {
+            latitude?: number | null;
+            longitude?: number | null;
+          };
+
+          const coordinates = {
+            latitude: typeof data.latitude === "number" ? data.latitude : null,
+            longitude: typeof data.longitude === "number" ? data.longitude : null,
+          };
+
+          geocodeCacheRef.current.set(place.url, coordinates);
+          setClassifiedPlaces((prev) =>
+            prev.map((item) =>
+              item.url === place.url
+                ? { ...item, latitude: coordinates.latitude, longitude: coordinates.longitude }
+                : item
+            )
+          );
+          logItemStage("geocode", "success", { itemId: place.itemId, url: place.url }, {
+            hasCoordinates: coordinates.latitude !== null && coordinates.longitude !== null,
+          });
+        } catch {
+          logItemStage("geocode", "error", { itemId: place.itemId, url: place.url });
+          // ignore geocode errors to keep UX responsive
+        } finally {
+          geocodeInFlightRef.current.delete(place.url);
+        }
+      })
+    );
   };
 
   /* =====================
@@ -215,6 +429,18 @@ export default function PlanPage() {
     setOgpUrls(Array.from(new Set(incoming)));
   }, [sp]);
 
+  useEffect(() => {
+    if (hasLoggedPageViewRef.current) return;
+    hasLoggedPageViewRef.current = true;
+    sendClientLog({
+      eventType: "page_view",
+      page: "/plan",
+      metadata: {
+        source: "plan_page",
+      },
+    });
+  }, []);
+
   /* =====================
    * OGP fetch & classify (並列処理最適化)
    ===================== */
@@ -226,43 +452,69 @@ export default function PlanPage() {
         const res = await fetch("/api/ogp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls: ogpUrls }),
+          body: JSON.stringify({ urls: ogpUrls, flow_id: ensureFlowId() }),
         });
         if (!res.ok) throw new Error('OGP取得に失敗しました');
         const data = await res.json().catch(() => ({ results: [] }));
         setOgpItems(data.results ?? []);
         
         // ✅ 並列処理: 全URLを同時にclassify
-        const classified = await Promise.all(
+        const classified: ClassifiedPlaceState[] = await Promise.all(
           (data.results ?? []).map(async (item: Ogp) => {
+            const itemId = createItemIdFromUrl(item.url);
+            logItemStage("ogp", "success", { itemId, url: item.url }, {
+              provider: item.provider ?? "website",
+            });
             try {
               const classRes = await fetch("/api/classify-place", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  title: item.title,
-                  description: item.description,
-                  url: item.url
+                  item_id: itemId,
+                  flow_id: ensureFlowId(),
+                  url: item.url,
+                  title: item.title ?? null,
+                  description: item.description ?? null,
+                  image: item.image ?? null,
+                  siteName: item.siteName ?? null,
+                  favicon: item.favicon ?? null,
+                  provider: item.provider ?? "website",
                 })
               });
+              if (!classRes.ok) {
+                logItemStage("classify_place", "error", { itemId, url: item.url }, {
+                  status: classRes.status,
+                });
+              }
               const classData = await classRes.json();
+              logItemStage("classify_place", "success", { itemId, url: item.url }, {
+                category: classData.category || "visit",
+              });
               return {
+                itemId,
                 url: item.url,
                 category: classData.category || "visit",
                 name: classData.name || item.title || "",
-                address: classData.address || ""
+                address: classData.address || "",
+                latitude: null,
+                longitude: null,
               };
             } catch {
+              logItemStage("classify_place", "error", { itemId, url: item.url });
               return {
+                itemId,
                 url: item.url,
                 category: "visit",
                 name: item.title || "",
-                address: ""
+                address: "",
+                latitude: null,
+                longitude: null,
               };
             }
           })
         );
         setClassifiedPlaces(classified);
+        void enrichClassifiedPlacesWithGeocode(classified);
       } catch (error) {
         console.error('OGP fetch error:', error);
         setOgpItems([]);
@@ -838,6 +1090,61 @@ export default function PlanPage() {
                   showDetails
                 };
                 sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
+                sendClientLog({
+                  eventType: "ai_consult_click",
+                  page: "/plan",
+                  targetUrl: "/chat",
+                  metadata: {
+                    hasDepartSelected: Boolean(departSelected),
+                    classifiedPlacesCount: classifiedPlaces.length,
+                  },
+                });
+                const integratedItems: IntegratedItemLog[] = (ogpItems ?? []).map((ogp) => {
+                  const itemId = createItemIdFromUrl(ogp.url);
+                  const classified = classifiedPlaces.find((x) => x.url === ogp.url);
+                  return {
+                    item_id: itemId,
+                    normalized_url: normalizeTrackUrl(ogp.url),
+                    ogp: {
+                      url: ogp.url,
+                      title: ogp.title ?? null,
+                      description: ogp.description ?? null,
+                      image: ogp.image ?? null,
+                      siteName: ogp.siteName ?? null,
+                      favicon: ogp.favicon ?? null,
+                      provider: typeof ogp.provider === "string" ? ogp.provider : null,
+                    },
+                    classify_place: classified
+                      ? {
+                          category: classified.category,
+                          name: classified.name || null,
+                          address: classified.address || null,
+                        }
+                      : null,
+                    geocode: classified
+                      ? {
+                          latitude: classified.latitude ?? null,
+                          longitude: classified.longitude ?? null,
+                        }
+                      : null,
+                  };
+                });
+                sendClientLog({
+                  eventType: "ai_consult_snapshot",
+                  page: "/plan",
+                  targetUrl: "/chat",
+                  metadata: {
+                    schema_version: INTEGRATED_ITEMS_SCHEMA_VERSION,
+                    flow_id: ensureFlowId(),
+                    integrated_items: integratedItems,
+                    depart: {
+                      selected: departSelected,
+                      mode: departMode,
+                      coords: departCoords,
+                      locationInfo: departLocationInfo,
+                    },
+                  },
+                });
                 router.push("/chat");
               }}
               disabled={!departSelected || classifiedPlaces.length === 0}

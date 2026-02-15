@@ -17,11 +17,19 @@ JSON形式で返してください:
 - move: 駅、空港、バス停等の交通施設`;
 
 export function buildClassifyPlacePrompt(params: {
+  url?: string | null;
   title?: string;
   description?: string;
-  url?: string;
+  image?: string | null;
+  siteName?: string | null;
+  favicon?: string | null;
+  provider?: string | null;
 }): string {
-  return `タイトル: ${params.title || ""}
+  return `URL: ${params.url || ""}
+タイトル: ${params.title || ""}
 説明: ${params.description || ""}
-URL: ${params.url || ""}`;
+画像: ${params.image || ""}
+サイト名: ${params.siteName || ""}
+favicon: ${params.favicon || ""}
+provider: ${params.provider || ""}`;
 }

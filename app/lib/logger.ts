@@ -19,12 +19,48 @@ type LogEntry = {
   };
 };
 
+const AWS_FORWARDABLE_CLIENT_EVENTS = new Set([
+  "page_view",
+  "start_button_click",
+  "ai_consult_click",
+  "item_stage",
+  "ai_consult_snapshot",
+  "reservation_click",
+]);
+
+type AwsLogClassification = {
+  log_class:
+    | "user_event"
+    | "api_failure"
+    | "api_latency_slow"
+    | "external_dependency_failure"
+    | "retry_exhausted"
+    | "rate_limited"
+    | "schema_mismatch"
+    | "security_reject"
+    | "operational";
+  event_name: string;
+  severity: LogLevel;
+  endpoint: string | null;
+  duration_ms: number | null;
+};
+
 function truncateString(value: string, max = 2000): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max)}...<truncated>`;
 }
 
 function sanitizeLogEntry(entry: LogEntry): LogEntry {
+  const isFullOgpResponseLog =
+    entry.context?.endpoint === "/api/ogp" &&
+    entry.message === "OGP response generated";
+  const isAiConsultSnapshotLog =
+    entry.context?.endpoint === "/api/client-log" &&
+    entry.message === "Client event received" &&
+    typeof entry.data === "object" &&
+    entry.data !== null &&
+    (entry.data as Record<string, unknown>).eventType === "ai_consult_snapshot";
+
   const cloned: LogEntry = {
     ...entry,
     message: truncateString(entry.message, 1000),
@@ -33,8 +69,11 @@ function sanitizeLogEntry(entry: LogEntry): LogEntry {
 
   if (entry.data !== undefined) {
     try {
+      const serialized = JSON.stringify(entry.data);
       cloned.data = JSON.parse(
-        truncateString(JSON.stringify(entry.data), 6000)
+        isFullOgpResponseLog || isAiConsultSnapshotLog
+          ? serialized
+          : truncateString(serialized, 6000)
       );
     } catch {
       cloned.data = { note: "unserializable_data" };
@@ -55,6 +94,23 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.trunc(parsed);
+}
+
+function parseDurationMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const m = value.match(/^(\d+(?:\.\d+)?)ms$/);
+    if (!m) return null;
+    const parsed = Number(m[1]);
+    return Number.isFinite(parsed) ? Math.round(parsed) : null;
+  }
+  return null;
+}
+
+function hasText(value: unknown, pattern: RegExp): boolean {
+  return typeof value === "string" && pattern.test(value);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -115,6 +171,9 @@ class Logger {
     if (!lambdaUrl || !accessKey || !secret) {
       return;
     }
+    if (!this.shouldForwardToAws(entry)) {
+      return;
+    }
 
     if (Date.now() < Logger.lambdaDisabledUntil) {
       return;
@@ -133,8 +192,10 @@ class Logger {
     const logRequestId = typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const classification = this.classifyForAws(entry);
     const payload = {
       ...entry,
+      aws_meta: classification,
       context: {
         ...(entry.context ?? {}),
         logRequestId,
@@ -205,6 +266,156 @@ class Logger {
         cooldownMs,
       });
     }
+  }
+
+  private shouldForwardToAws(entry: LogEntry): boolean {
+    // Always forward high-priority operational logs.
+    if (entry.level === "error" || entry.level === "warn") {
+      return true;
+    }
+
+    // Suppress debug in AWS forwarding by default.
+    if (entry.level === "debug") {
+      return false;
+    }
+
+    // For info logs, only forward selected client analytics events.
+    if (
+      entry.level === "info" &&
+      entry.context?.endpoint === "/api/client-log" &&
+      entry.message === "Client event received"
+    ) {
+      const eventType =
+        typeof entry.data === "object" && entry.data !== null
+          ? (entry.data as Record<string, unknown>).eventType
+          : null;
+      return typeof eventType === "string" && AWS_FORWARDABLE_CLIENT_EVENTS.has(eventType);
+    }
+
+    return false;
+  }
+
+  private classifyForAws(entry: LogEntry): AwsLogClassification {
+    const endpoint = typeof entry.context?.endpoint === "string" ? entry.context.endpoint : null;
+    const message = entry.message ?? "";
+    const data =
+      typeof entry.data === "object" && entry.data !== null
+        ? (entry.data as Record<string, unknown>)
+        : null;
+    const durationMs = parseDurationMs(data?.duration);
+    const slowThresholdMs = parsePositiveInt(process.env.AWS_LOG_SLOW_THRESHOLD_MS, 3000);
+
+    if (
+      endpoint === "/api/client-log" &&
+      message === "Client event received" &&
+      typeof data?.eventType === "string"
+    ) {
+      return {
+        log_class: "user_event",
+        event_name: data.eventType,
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      entry.level === "warn" &&
+      (hasText(message, /invalid .*request/i) || hasText(message, /schema/i))
+    ) {
+      return {
+        log_class: "schema_mismatch",
+        event_name: "schema_mismatch",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      entry.level === "warn" &&
+      (hasText(message, /rejected/i) || hasText(message, /private network access not allowed/i))
+    ) {
+      return {
+        log_class: "security_reject",
+        event_name: "security_reject",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      hasText(message, /rate limit/i) ||
+      hasText(String(data?.reason ?? ""), /rate limit/i)
+    ) {
+      return {
+        log_class: "rate_limited",
+        event_name: "rate_limited",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      entry.level === "error" &&
+      (hasText(message, /retry/i) || hasText(String(data?.error ?? ""), /retry/i))
+    ) {
+      return {
+        log_class: "retry_exhausted",
+        event_name: "retry_exhausted",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      entry.level === "error" &&
+      (hasText(message, /openai|nominatim|oembed|lambda|fetch/i) ||
+        hasText(String(data?.error ?? ""), /timeout|econn|network|gateway|service unavailable/i))
+    ) {
+      return {
+        log_class: "external_dependency_failure",
+        event_name: "external_dependency_failure",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (entry.level === "error") {
+      return {
+        log_class: "api_failure",
+        event_name: "api_failure",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    if (
+      entry.level === "warn" &&
+      durationMs !== null &&
+      durationMs >= slowThresholdMs
+    ) {
+      return {
+        log_class: "api_latency_slow",
+        event_name: "api_latency_slow",
+        severity: entry.level,
+        endpoint,
+        duration_ms: durationMs,
+      };
+    }
+
+    return {
+      log_class: "operational",
+      event_name: "operational",
+      severity: entry.level,
+      endpoint,
+      duration_ms: durationMs,
+    };
   }
 
   private shouldSuppressDuplicate(entry: LogEntry, dedupeWindowMs: number): boolean {

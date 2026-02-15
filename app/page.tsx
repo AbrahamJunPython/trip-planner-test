@@ -18,10 +18,37 @@ export default function Home() {
     page: string
     targetUrl?: string
   }) => {
+    const createId = () => {
+      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID()
+      }
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    }
+
+    const ensureId = (storage: Storage, key: string) => {
+      const existing = storage.getItem(key)
+      if (existing) return existing
+      const created = createId()
+      storage.setItem(key, created)
+      return created
+    }
+
+    let sessionId: string | null = null
+    let userId: string | null = null
+    let deviceId: string | null = null
+    if (typeof window !== 'undefined') {
+      sessionId = ensureId(sessionStorage, 'analytics_session_id')
+      userId = ensureId(localStorage, 'analytics_user_id')
+      deviceId = ensureId(localStorage, 'analytics_device_id')
+    }
+
     const body = JSON.stringify({
       ...payload,
       timestamp: new Date().toISOString(),
       referrer: typeof document !== 'undefined' ? document.referrer || null : null,
+      session_id: sessionId,
+      user_id: userId,
+      device_id: deviceId,
     })
 
     try {

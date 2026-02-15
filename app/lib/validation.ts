@@ -18,6 +18,47 @@ export const chatRequestSchema = z.object({
     depart: z.string().max(200).nullable(),
   }),
   ogpData: z.any().optional(),
+  integratedContext: z.object({
+    schemaVersion: z.string().max(20),
+    flowId: z.string().max(100).nullable(),
+    depart: z.object({
+      selected: z.string().max(200).nullable(),
+      mode: z.string().max(20).nullable(),
+      coords: z.object({
+        lat: z.number().min(-90).max(90),
+        lon: z.number().min(-180).max(180),
+      }).nullable(),
+      locationInfo: z.object({
+        latitude: z.number().min(-90).max(90).nullable(),
+        longitude: z.number().min(-180).max(180).nullable(),
+        postcode: z.string().max(20).nullable(),
+        city: z.string().max(100).nullable(),
+        prefecture: z.string().max(100).nullable(),
+      }).nullable(),
+    }),
+    items: z.array(z.object({
+      item_id: z.string().max(100),
+      normalized_url: z.string().max(2048),
+      ogp: z.object({
+        url: z.string().max(2048),
+        title: z.string().max(500).nullable(),
+        description: z.string().max(4000).nullable(),
+        image: z.string().max(2048).nullable(),
+        siteName: z.string().max(200).nullable(),
+        favicon: z.string().max(2048).nullable(),
+        provider: z.string().max(30).nullable(),
+      }),
+      classify_place: z.object({
+        category: z.string().max(30).nullable(),
+        name: z.string().max(200).nullable(),
+        address: z.string().max(500).nullable(),
+      }).nullable(),
+      geocode: z.object({
+        latitude: z.number().min(-90).max(90).nullable(),
+        longitude: z.number().min(-180).max(180).nullable(),
+      }).nullable(),
+    })).max(30),
+  }).optional(),
 });
 
 // Generate request validation

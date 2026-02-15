@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { createItemIdFromUrl, normalizeTrackUrl } from "../lib/item-tracking";
 
 type ClassifiedPlace = {
   url: string;
   category: string;
   name: string;
   address: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type PlaceWithInfo = ClassifiedPlace & {
@@ -23,14 +26,115 @@ type PlaceWithInfo = ClassifiedPlace & {
   ogp?: any;
 };
 
+type IntegratedItem = {
+  item_id: string;
+  normalized_url: string;
+  ogp: {
+    url: string;
+    title: string | null;
+    description: string | null;
+    image: string | null;
+    siteName: string | null;
+    favicon: string | null;
+    provider: string | null;
+  };
+  classify_place: {
+    category: string | null;
+    name: string | null;
+    address: string | null;
+  } | null;
+  geocode: {
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+};
+
+type ChatIntegratedContext = {
+  schemaVersion: string;
+  flowId: string | null;
+  depart: {
+    selected: string | null;
+    mode: string | null;
+    coords: { lat: number; lon: number } | null;
+    locationInfo: {
+      latitude: number | null;
+      longitude: number | null;
+      postcode: string | null;
+      city: string | null;
+      prefecture: string | null;
+    } | null;
+  };
+  items: IntegratedItem[];
+};
+
 export default function ChatPage() {
   const router = useRouter();
   const [places, setPlaces] = useState<PlaceWithInfo[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [context, setContext] = useState<{ depart: string | null; ogpItems: any[] }>({ depart: null, ogpItems: [] });
+  const [context, setContext] = useState<{
+    depart: string | null;
+    ogpItems: any[];
+    integratedContext: ChatIntegratedContext | null;
+  }>({ depart: null, ogpItems: [], integratedContext: null });
   const [tripName, setTripName] = useState("新しい旅行");
   const [isEditingTripName, setIsEditingTripName] = useState(false);
+  const hasSentIntegratedContextRef = useRef(false);
+  const hasLoggedPageViewRef = useRef(false);
+
+  const sendClientLog = (payload: {
+    eventType: "page_view" | "reservation_click";
+    page: string;
+    targetUrl?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    const createId = () => {
+      if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID();
+      }
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    };
+
+    const ensureId = (storage: Storage, key: string) => {
+      const existing = storage.getItem(key);
+      if (existing) return existing;
+      const created = createId();
+      storage.setItem(key, created);
+      return created;
+    };
+
+    let sessionId: string | null = null;
+    let userId: string | null = null;
+    let deviceId: string | null = null;
+    let flowId: string | null = null;
+    if (typeof window !== "undefined") {
+      sessionId = ensureId(sessionStorage, "analytics_session_id");
+      userId = ensureId(localStorage, "analytics_user_id");
+      deviceId = ensureId(localStorage, "analytics_device_id");
+      flowId = sessionStorage.getItem("plan_flow_id");
+    }
+
+    const body = JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+      referrer: typeof document !== "undefined" ? document.referrer || null : null,
+      session_id: sessionId,
+      user_id: userId,
+      device_id: deviceId,
+      flow_id: flowId,
+    });
+
+    try {
+      void fetch("/api/client-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    } catch {
+      // ignore logging errors on UI path
+    }
+  };
 
   useEffect(() => {
     const savedData = sessionStorage.getItem("trip_form_data");
@@ -38,6 +142,37 @@ export default function ChatPage() {
       try {
         const data = JSON.parse(savedData);
         const classifiedPlaces: ClassifiedPlace[] = data.classifiedPlaces || [];
+        const ogpItems = data.ogpItems || [];
+        const integratedItems: IntegratedItem[] = ogpItems.map((ogp: any) => {
+          const normalizedUrl = normalizeTrackUrl(ogp.url);
+          const classified = classifiedPlaces.find((p) => normalizeTrackUrl(p.url) === normalizedUrl);
+          return {
+            item_id: createItemIdFromUrl(ogp.url),
+            normalized_url: normalizedUrl,
+            ogp: {
+              url: ogp.url,
+              title: ogp.title ?? null,
+              description: ogp.description ?? null,
+              image: ogp.image ?? null,
+              siteName: ogp.siteName ?? null,
+              favicon: ogp.favicon ?? null,
+              provider: typeof ogp.provider === "string" ? ogp.provider : null,
+            },
+            classify_place: classified
+              ? {
+                  category: classified.category ?? null,
+                  name: classified.name ?? null,
+                  address: classified.address ?? null,
+                }
+              : null,
+            geocode: classified
+              ? {
+                  latitude: classified.latitude ?? null,
+                  longitude: classified.longitude ?? null,
+                }
+              : null,
+          };
+        });
         
         // Sort: hotel -> move -> visit
         const sorted = classifiedPlaces.sort((a, b) => {
@@ -46,7 +181,21 @@ export default function ChatPage() {
         });
         
         setPlaces(sorted.map(p => ({ ...p, confirmed: false })));
-        setContext({ depart: data.departSelected || null, ogpItems: data.ogpItems || [] });
+        setContext({
+          depart: data.departSelected || null,
+          ogpItems,
+          integratedContext: {
+            schemaVersion: "1.0.0",
+            flowId: sessionStorage.getItem("plan_flow_id"),
+            depart: {
+              selected: data.departSelected || null,
+              mode: data.departMode || null,
+              coords: data.departCoords || null,
+              locationInfo: data.departLocationInfo || null,
+            },
+            items: integratedItems,
+          },
+        });
         setTripName(data.tripName || "新しい旅行");
       } catch {
         router.push("/plan");
@@ -78,6 +227,18 @@ export default function ChatPage() {
     }
   }, [currentIndex, places]);
 
+  useEffect(() => {
+    if (hasLoggedPageViewRef.current) return;
+    hasLoggedPageViewRef.current = true;
+    sendClientLog({
+      eventType: "page_view",
+      page: "/chat",
+      metadata: {
+        source: "chat_page",
+      },
+    });
+  }, []);
+
   const fetchPlaceInfo = async () => {
     if (isLoading) return;
     
@@ -93,10 +254,14 @@ export default function ChatPage() {
           place: currentPlace,
           context: { depart: context.depart },
           ogpData,
+          integratedContext: hasSentIntegratedContextRef.current ? undefined : context.integratedContext,
         }),
       });
 
       const data = await res.json();
+      if (res.ok && !hasSentIntegratedContextRef.current && context.integratedContext) {
+        hasSentIntegratedContextRef.current = true;
+      }
       
       if (data.facilityName && data.description) {
         setPlaces(prev => {
@@ -144,6 +309,18 @@ export default function ChatPage() {
   const handleReserve = () => {
     const query = `${currentPlace.name} ${currentPlace.address} 予約`;
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    sendClientLog({
+      eventType: "reservation_click",
+      page: "/chat",
+      targetUrl: googleUrl,
+      metadata: {
+        item_id: createItemIdFromUrl(currentPlace.url),
+        place_name: currentPlace.name,
+        category: currentPlace.category,
+        source_url: currentPlace.url,
+        official_url: currentPlace.officialUrl || null,
+      },
+    });
     window.open(googleUrl, "_blank");
     addToTaskList();
     if (currentIndex < places.length - 1) {

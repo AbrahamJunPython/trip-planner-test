@@ -19,13 +19,14 @@ export function buildChatUserPrompt(params: {
   category: string;
   url: string;
   depart?: string;
+  additionalContext?: string;
 }): string {
   const categoryName = 
     params.category === "hotel" ? "宿泊施設" :
     params.category === "visit" ? "観光地" :
     params.category === "food" ? "飲食店" : "移動手段";
 
-  return `以下の施設について情報を教えてください：
+  const basePrompt = `以下の施設について情報を教えてください：
 
 名前: ${params.name}
 住所: ${params.address}
@@ -33,4 +34,13 @@ export function buildChatUserPrompt(params: {
 URL: ${params.url}
 
 出発地: ${params.depart || "未設定"}`;
+
+  if (!params.additionalContext) {
+    return basePrompt;
+  }
+
+  return `${basePrompt}
+
+補足コンテキスト:
+${params.additionalContext}`;
 }

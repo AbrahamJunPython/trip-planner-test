@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createItemIdFromUrl } from "../lib/item-tracking";
 
 type TaskItem = {
   name: string;
@@ -16,10 +17,77 @@ export default function TaskPage() {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const hasLoggedPageViewRef = useRef(false);
+
+  const sendClientLog = (payload: {
+    eventType: "page_view" | "reservation_click";
+    page: string;
+    targetUrl?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    const createId = () => {
+      if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID();
+      }
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    };
+
+    const ensureId = (storage: Storage, key: string) => {
+      const existing = storage.getItem(key);
+      if (existing) return existing;
+      const created = createId();
+      storage.setItem(key, created);
+      return created;
+    };
+
+    let sessionId: string | null = null;
+    let userId: string | null = null;
+    let deviceId: string | null = null;
+    let flowId: string | null = null;
+    if (typeof window !== "undefined") {
+      sessionId = ensureId(sessionStorage, "analytics_session_id");
+      userId = ensureId(localStorage, "analytics_user_id");
+      deviceId = ensureId(localStorage, "analytics_device_id");
+      flowId = sessionStorage.getItem("plan_flow_id");
+    }
+
+    const body = JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+      referrer: typeof document !== "undefined" ? document.referrer || null : null,
+      session_id: sessionId,
+      user_id: userId,
+      device_id: deviceId,
+      flow_id: flowId,
+    });
+
+    try {
+      void fetch("/api/client-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    } catch {
+      // ignore logging errors on UI path
+    }
+  };
 
   useEffect(() => {
     const taskList = JSON.parse(sessionStorage.getItem("task_list") || "[]");
     setTasks(taskList);
+  }, []);
+
+  useEffect(() => {
+    if (hasLoggedPageViewRef.current) return;
+    hasLoggedPageViewRef.current = true;
+    sendClientLog({
+      eventType: "page_view",
+      page: "/task",
+      metadata: {
+        source: "task_page",
+      },
+    });
   }, []);
 
   const iconMap: Record<string, string> = {
@@ -91,6 +159,20 @@ export default function TaskPage() {
                         href={task.url}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={() => {
+                          sendClientLog({
+                            eventType: "reservation_click",
+                            page: "/task",
+                            targetUrl: task.url,
+                            metadata: {
+                              item_id: createItemIdFromUrl(task.url),
+                              task_name: task.name,
+                              category: task.category,
+                              address: task.address,
+                              official_url: task.officialUrl || null,
+                            },
+                          });
+                        }}
                         className="px-4 py-2 bg-blue-500 text-white rounded-xl text-xs font-bold hover:bg-blue-600"
                       >
                         予約

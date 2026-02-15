@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import type { Ogp } from "../../types";
 import { createLogger } from "@/app/lib/logger";
+import { createItemIdFromUrl } from "@/app/lib/item-tracking";
+import { getClientIpHash, getDurationMs, isSlowDuration } from "@/app/lib/log-fields";
 import { detectProvider } from "./provider";
 import {
   fetchTikTokOembed,
@@ -154,21 +156,34 @@ async function scrapeOgp(url: string): Promise<Ogp> {
 
     return { url, title, description, image, siteName, favicon };
   } catch (error) {
-    logger.error(`Error scraping OGP for ${url}`, error as Error);
+    const message = error instanceof Error ? error.message : "unknown_error";
+    logger.error(`Error scraping OGP for ${url}`, error as Error, {
+      status: 502,
+      error_code: "ogp_scrape_failed",
+      endpoint: "/api/ogp",
+      item_id: createItemIdFromUrl(url),
+      dependency: "external_page_fetch",
+      timeout: /timeout/i.test(message),
+      retry_count: null,
+    });
     return fallbackCard(url);
   }
 }
 
 export async function POST(req: Request) {
   const startTime = Date.now();
+  const clientIpHash = getClientIpHash(req);
 
   try {
     const body = await req.json().catch(() => null);
     const urls: string[] = Array.isArray(body?.urls) ? body.urls : [];
+    const flowId = typeof body?.flow_id === "string" ? body.flow_id : null;
 
     logger.info("OGP request received", {
       inputUrlCount: urls.length,
       inputUrls: urls,
+      flowId,
+      flow_id: flowId,
     });
 
     const cleaned = urls.map(normalizeUrl).filter((u): u is string => Boolean(u));
@@ -176,6 +191,12 @@ export async function POST(req: Request) {
       logger.warn("Some URLs were dropped during normalization", {
         inputUrlCount: urls.length,
         normalizedUrlCount: cleaned.length,
+        reason: "url_normalization_failed_or_disallowed",
+        status: 400,
+        error_code: "ogp_invalid_url",
+        flow_id: flowId,
+        item_id: null,
+        client_ip_hash: clientIpHash,
       });
     }
 
@@ -183,13 +204,18 @@ export async function POST(req: Request) {
       cleaned.map(async (url) => {
         try {
           const provider = detectProvider(url);
-          logger.info("Processing OGP URL", { url, provider });
+          const itemId = createItemIdFromUrl(url);
+          logger.info("Processing OGP URL", { url, provider, itemId, flowId });
 
           if (provider === "youtube") {
             const o = await fetchYouTubeOembed(url);
             if (o) {
               logger.info("OGP URL processed via YouTube oEmbed", {
                 url,
+                itemId,
+                flowId,
+                flow_id: flowId,
+                item_id: itemId,
                 result: summarizeResult(o),
               });
               return o;
@@ -201,6 +227,10 @@ export async function POST(req: Request) {
             if (o) {
               logger.info("OGP URL processed via TikTok oEmbed", {
                 url,
+                itemId,
+                flowId,
+                flow_id: flowId,
+                item_id: itemId,
                 result: summarizeResult(o),
               });
               return o;
@@ -212,6 +242,10 @@ export async function POST(req: Request) {
             if (o) {
               logger.info("OGP URL processed via Instagram oEmbed", {
                 url,
+                itemId,
+                flowId,
+                flow_id: flowId,
+                item_id: itemId,
                 result: summarizeResult(o),
               });
               return o;
@@ -221,12 +255,26 @@ export async function POST(req: Request) {
           const scraped = { ...(await scrapeOgp(url)), provider };
           logger.info("OGP URL processed via HTML scraping", {
             url,
+            itemId,
+            flowId,
+            flow_id: flowId,
+            item_id: itemId,
             result: summarizeResult(scraped),
           });
           return scraped;
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "unknown_error";
           const fallback = fallbackCard(url);
           logger.error(`Error processing URL ${url}`, error as Error, {
+            itemId: createItemIdFromUrl(url),
+            flowId,
+            flow_id: flowId,
+            item_id: createItemIdFromUrl(url),
+            status: 502,
+            error_code: "ogp_url_processing_failed",
+            dependency: "external_page_fetch",
+            timeout: /timeout/i.test(errorMessage),
+            retry_count: null,
             fallback: summarizeResult(fallback),
           });
           return fallback;
@@ -234,16 +282,35 @@ export async function POST(req: Request) {
       })
     );
 
+    const durationMs = getDurationMs(startTime);
     logger.info("OGP response generated", {
-      duration: `${Date.now() - startTime}ms`,
+      duration: `${durationMs}ms`,
+      duration_ms: durationMs,
       resultCount: results.length,
-      results: results.map(summarizeResult),
+      flowId,
+      flow_id: flowId,
+      results,
     });
+    if (isSlowDuration(durationMs)) {
+      logger.warn("OGP API slow response", {
+        endpoint: "/api/ogp",
+        duration_ms: durationMs,
+        flow_id: flowId,
+      });
+    }
 
     return NextResponse.json({ results });
   } catch (error) {
+    const durationMs = getDurationMs(startTime);
     logger.error("POST request error", error as Error, {
-      duration: `${Date.now() - startTime}ms`,
+      duration: `${durationMs}ms`,
+      duration_ms: durationMs,
+      status: 500,
+      error_code: "ogp_post_failed",
+      endpoint: "/api/ogp",
+      flow_id: null,
+      item_id: null,
+      client_ip_hash: clientIpHash,
     });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
