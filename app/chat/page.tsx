@@ -258,30 +258,58 @@ export default function ChatPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : `chat_api_failed_${res.status}`
+        );
+      }
       if (res.ok && !hasSentIntegratedContextRef.current && context.integratedContext) {
         hasSentIntegratedContextRef.current = true;
       }
       
-      if (data.facilityName && data.description) {
-        setPlaces(prev => {
-          const updated = [...prev];
-          updated[currentIndex] = {
-            ...updated[currentIndex],
-            facilityName: data.facilityName,
-            description: data.description,
-            address: data.address,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            officialUrl: data.officialUrl,
-            sourceUrl: data.sourceUrl,
-            ogp: data.ogp
-          };
-          return updated;
-        });
-      }
+      setPlaces(prev => {
+        const updated = [...prev];
+        updated[currentIndex] = {
+          ...updated[currentIndex],
+          facilityName:
+            typeof data?.facilityName === "string" && data.facilityName
+              ? data.facilityName
+              : updated[currentIndex].name,
+          description:
+            typeof data?.description === "string" && data.description
+              ? data.description
+              : "情報の取得に失敗しました。削除するか次へ進んでください。",
+          address:
+            typeof data?.address === "string" && data.address
+              ? data.address
+              : updated[currentIndex].address,
+          latitude: typeof data?.latitude === "number" ? data.latitude : null,
+          longitude: typeof data?.longitude === "number" ? data.longitude : null,
+          officialUrl:
+            typeof data?.officialUrl === "string" && data.officialUrl
+              ? data.officialUrl
+              : updated[currentIndex].url,
+          sourceUrl:
+            typeof data?.sourceUrl === "string" && data.sourceUrl
+              ? data.sourceUrl
+              : updated[currentIndex].url,
+          ogp: data?.ogp ?? null,
+        };
+        return updated;
+      });
     } catch (error) {
       console.error("Fetch place info error:", error);
+      setPlaces(prev => {
+        const updated = [...prev];
+        updated[currentIndex] = {
+          ...updated[currentIndex],
+          description: "情報の取得に失敗しました。削除するか次へ進んでください。",
+          officialUrl: updated[currentIndex].officialUrl || updated[currentIndex].url,
+          sourceUrl: updated[currentIndex].sourceUrl || updated[currentIndex].url,
+        };
+        return updated;
+      });
     } finally {
       setIsLoading(false);
     }
