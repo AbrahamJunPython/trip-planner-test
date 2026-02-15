@@ -42,6 +42,9 @@ vercel --prod
 - `AWS_LOG_LAMBDA_URL`: アプリログを転送するLambdaエンドポイントURL
 - `AWS_S3_ACCESS_KEY`: Lambda認証用アクセスキー（サーバー側でのみ利用）
 - `AWS_S3_SECRET`: Lambda認証用シークレット（サーバー側でのみ利用）
+- `AWS_LOG_LAMBDA_TIMEOUT_MS`: ログ転送タイムアウト（ms、既定 15000）
+- `AWS_LOG_LAMBDA_RETRIES`: ログ転送リトライ回数（既定 2）
+- `AWS_LOG_LAMBDA_COOLDOWN_MS`: 連続失敗時の一時停止時間（ms、既定 60000）
 
 ## トラブルシューティング
 

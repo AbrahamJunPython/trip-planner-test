@@ -51,8 +51,20 @@ function sanitizeLogEntry(entry: LogEntry): LogEntry {
   return cloned;
 }
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.trunc(parsed);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class Logger {
   private context: LogContext = {};
+  private static consecutiveLambdaFailures = 0;
+  private static lambdaDisabledUntil = 0;
 
   setContext(context: LogContext) {
     this.context = { ...this.context, ...context };
@@ -103,31 +115,73 @@ class Logger {
       return;
     }
 
-    try {
-      const response = await fetch(lambdaUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-aws-access-key": accessKey,
-          "x-aws-secret": secret,
-        },
-        body: JSON.stringify(entry),
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-      });
+    if (Date.now() < Logger.lambdaDisabledUntil) {
+      return;
+    }
 
-      if (!response.ok) {
+    const timeoutMs = parsePositiveInt(process.env.AWS_LOG_LAMBDA_TIMEOUT_MS, 15000);
+    const maxAttempts = parsePositiveInt(process.env.AWS_LOG_LAMBDA_RETRIES, 2);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const response = await fetch(lambdaUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-aws-access-key": accessKey,
+            "x-aws-secret": secret,
+          },
+          body: JSON.stringify(entry),
+          cache: "no-store",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (response.ok) {
+          Logger.consecutiveLambdaFailures = 0;
+          Logger.lambdaDisabledUntil = 0;
+          return;
+        }
+
         const bodyPreview = await response.text().catch(() => "");
         console.error("[LOGGER] AWS Lambda log forwarding failed:", {
+          attempt,
+          maxAttempts,
           status: response.status,
           statusText: response.statusText,
           bodyPreview: bodyPreview.slice(0, 300),
           endpoint: entry.context?.endpoint ?? null,
           level: entry.level,
         });
+
+        if (attempt < maxAttempts && response.status >= 500) {
+          await sleep(250 * attempt);
+          continue;
+        }
+        break;
+      } catch (sendError) {
+        console.error("[LOGGER] Failed to send log to AWS Lambda:", {
+          attempt,
+          maxAttempts,
+          error: sendError,
+          endpoint: entry.context?.endpoint ?? null,
+          level: entry.level,
+        });
+
+        if (attempt < maxAttempts) {
+          await sleep(250 * attempt);
+          continue;
+        }
       }
-    } catch (sendError) {
-      console.error("[LOGGER] Failed to send log to AWS Lambda:", sendError);
+    }
+
+    Logger.consecutiveLambdaFailures += 1;
+    if (Logger.consecutiveLambdaFailures >= 5) {
+      const cooldownMs = parsePositiveInt(process.env.AWS_LOG_LAMBDA_COOLDOWN_MS, 60000);
+      Logger.lambdaDisabledUntil = Date.now() + cooldownMs;
+      Logger.consecutiveLambdaFailures = 0;
+      console.error("[LOGGER] AWS Lambda forwarding temporarily disabled after repeated failures", {
+        cooldownMs,
+      });
     }
   }
 
