@@ -65,6 +65,7 @@ class Logger {
   private context: LogContext = {};
   private static consecutiveLambdaFailures = 0;
   private static lambdaDisabledUntil = 0;
+  private static recentLogSignatures = new Map<string, number>();
 
   setContext(context: LogContext) {
     this.context = { ...this.context, ...context };
@@ -121,6 +122,24 @@ class Logger {
 
     const timeoutMs = parsePositiveInt(process.env.AWS_LOG_LAMBDA_TIMEOUT_MS, 15000);
     const maxAttempts = parsePositiveInt(process.env.AWS_LOG_LAMBDA_RETRIES, 2);
+    const dedupeWindowMs = parsePositiveInt(
+      process.env.AWS_LOG_LAMBDA_INFO_DEDUPE_WINDOW_MS,
+      5000
+    );
+    if (this.shouldSuppressDuplicate(entry, dedupeWindowMs)) {
+      return;
+    }
+
+    const logRequestId = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = {
+      ...entry,
+      context: {
+        ...(entry.context ?? {}),
+        logRequestId,
+      },
+    };
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -130,8 +149,9 @@ class Logger {
             "Content-Type": "application/json",
             "x-aws-access-key": accessKey,
             "x-aws-secret": secret,
+            "x-log-request-id": logRequestId,
           },
-          body: JSON.stringify(entry),
+          body: JSON.stringify(payload),
           cache: "no-store",
           signal: AbortSignal.timeout(timeoutMs),
         });
@@ -144,6 +164,7 @@ class Logger {
 
         const bodyPreview = await response.text().catch(() => "");
         console.error("[LOGGER] AWS Lambda log forwarding failed:", {
+          logRequestId,
           attempt,
           maxAttempts,
           status: response.status,
@@ -160,6 +181,7 @@ class Logger {
         break;
       } catch (sendError) {
         console.error("[LOGGER] Failed to send log to AWS Lambda:", {
+          logRequestId,
           attempt,
           maxAttempts,
           error: sendError,
@@ -183,6 +205,42 @@ class Logger {
         cooldownMs,
       });
     }
+  }
+
+  private shouldSuppressDuplicate(entry: LogEntry, dedupeWindowMs: number): boolean {
+    if (entry.level !== "info" || dedupeWindowMs <= 0) {
+      return false;
+    }
+
+    const endpoint = entry.context?.endpoint ?? "";
+    let dataString = "";
+    if (entry.data !== undefined) {
+      try {
+        dataString = truncateString(JSON.stringify(entry.data), 800);
+      } catch {
+        dataString = "unserializable_data";
+      }
+    }
+    const signature = `${endpoint}|${entry.level}|${entry.message}|${dataString}`;
+
+    const now = Date.now();
+    const expiresAt = Logger.recentLogSignatures.get(signature);
+    if (expiresAt && now < expiresAt) {
+      return true;
+    }
+
+    Logger.recentLogSignatures.set(signature, now + dedupeWindowMs);
+
+    // Light cleanup to avoid unbounded growth
+    if (Logger.recentLogSignatures.size > 2000) {
+      for (const [key, expiry] of Logger.recentLogSignatures.entries()) {
+        if (expiry <= now) {
+          Logger.recentLogSignatures.delete(key);
+        }
+      }
+    }
+
+    return false;
   }
 
   info(message: string, data?: any) {

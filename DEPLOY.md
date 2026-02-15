@@ -45,6 +45,7 @@ vercel --prod
 - `AWS_LOG_LAMBDA_TIMEOUT_MS`: ログ転送タイムアウト（ms、既定 15000）
 - `AWS_LOG_LAMBDA_RETRIES`: ログ転送リトライ回数（既定 2）
 - `AWS_LOG_LAMBDA_COOLDOWN_MS`: 連続失敗時の一時停止時間（ms、既定 60000）
+- `AWS_LOG_LAMBDA_INFO_DEDUPE_WINDOW_MS`: infoログの重複抑制時間窓（ms、既定 5000）
 
 ## トラブルシューティング
 
