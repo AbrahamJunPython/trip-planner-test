@@ -2,6 +2,7 @@ import './globals.css'
 import './lib/init'
 import { MobileShell } from './components/MobileShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata = {
   title: "Cocoico AI",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <ErrorBoundary>
           <MobileShell>{children}</MobileShell>
         </ErrorBoundary>
+        <Analytics />
       </body>
     </html>
   )
