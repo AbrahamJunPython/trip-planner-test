@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import type { Ogp } from "./types";
@@ -11,6 +11,30 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<Ogp[]>([])
   const [error, setError] = useState<string | null>(null)
+  const hasLoggedPageView = useRef(false)
+
+  const sendClientLog = (payload: {
+    eventType: 'page_view' | 'start_button_click'
+    page: string
+    targetUrl?: string
+  }) => {
+    const body = JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+      referrer: typeof document !== 'undefined' ? document.referrer || null : null,
+    })
+
+    try {
+      void fetch('/api/client-log', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+        keepalive: true,
+      })
+    } catch (logError) {
+      console.error('Client log send error:', logError)
+    }
+  }
 
   const parsedUrls = useMemo(() => {
     if (!rawUrls) return []
@@ -113,6 +137,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsedUrls]) // parsedUrls が変わったら再スケジュール
 
+  useEffect(() => {
+    if (hasLoggedPageView.current) return
+    hasLoggedPageView.current = true
+    sendClientLog({
+      eventType: 'page_view',
+      page: '/',
+    })
+  }, [])
+
   return (
     <div className="p-6 text-center max-w-md mx-auto">
       {/* Logo */}
@@ -151,9 +184,12 @@ export default function Home() {
         <button
           onClick={() => {
             try {
-              const q = new URLSearchParams()
-              items.forEach((it) => q.append('url', it.url))
-              const url = `/plan?${q.toString()}`
+              const url = '/plan'
+              sendClientLog({
+                eventType: 'start_button_click',
+                page: '/',
+                targetUrl: url,
+              })
               console.log('Navigating to:', url)
               router.push(url)
             } catch (error) {
@@ -165,43 +201,6 @@ export default function Home() {
           はじめる
         </button>
       </section>
-
-      {/* URL Paste Box */}
-      <section className="text-center mb-20">
-        <h2 className="text-[16px] font-bold text-gray-700 mb-3">
-          URLを貼り付け
-        </h2>
-
-        <textarea
-          value={rawUrls}
-          onChange={(e) => {
-            // 入力中にURLが混じったら吸い上げ（置換）
-            absorbUrlsFromText(e.target.value)
-          }}
-          onPaste={(e) => {
-            // 貼った瞬間にカード化したいので、通常貼り付けを止めて吸い上げ
-            e.preventDefault()
-            const pasted = e.clipboardData.getData('text')
-            absorbUrlsFromText(`${rawUrls}\n${pasted}`)
-          }}
-          placeholder={`URLを貼り付けるとカードに置き換わる`}
-          className="w-full min-h-[60px] p-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200 bg-white"
-        />
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      </section>
-
-      {/* OGP Cards */}
-      {items.length > 0 && (
-        <section className="space-y-2 text-center">
-          <h3 className="text-[16px] font-bold text-emerald-500">プレビュー</h3>
-
-          <div className="w-full min-h-[60px] p-4 rounded-xl border border-emerald-500 bg-white">
-            {items.map((it) => (
-              <OgpCard key={it.url} item={it} onRemove={() => removeUrl(it.url)} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Features */}
       <section className="space-y-16 mt-20">
