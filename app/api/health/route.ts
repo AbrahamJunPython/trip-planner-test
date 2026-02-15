@@ -52,6 +52,9 @@ export async function GET() {
     environment: {
       nodeEnv: process.env.NODE_ENV,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasAwsLogLambdaUrl: !!process.env.AWS_LOG_LAMBDA_URL,
+      hasAwsLogAccessKey: !!process.env.AWS_S3_ACCESS_KEY,
+      hasAwsLogSecret: !!process.env.AWS_S3_SECRET,
     },
   };
 

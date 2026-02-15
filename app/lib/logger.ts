@@ -104,7 +104,7 @@ class Logger {
     }
 
     try {
-      await fetch(lambdaUrl, {
+      const response = await fetch(lambdaUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -113,7 +113,19 @@ class Logger {
         },
         body: JSON.stringify(entry),
         cache: "no-store",
+        signal: AbortSignal.timeout(5000),
       });
+
+      if (!response.ok) {
+        const bodyPreview = await response.text().catch(() => "");
+        console.error("[LOGGER] AWS Lambda log forwarding failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          bodyPreview: bodyPreview.slice(0, 300),
+          endpoint: entry.context?.endpoint ?? null,
+          level: entry.level,
+        });
+      }
     } catch (sendError) {
       console.error("[LOGGER] Failed to send log to AWS Lambda:", sendError);
     }
