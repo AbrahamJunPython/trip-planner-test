@@ -37,6 +37,12 @@ vercel --prod
 - `META_APP_ID`: Meta App ID
 - `META_APP_SECRET`: Meta App Secret
 
+### オプション（AWS Lambda連携）
+- `AWS_LAMBDA_GENERATE_URL`: 生成処理を委譲するLambdaエンドポイントURL
+- `AWS_LOG_LAMBDA_URL`: アプリログを転送するLambdaエンドポイントURL
+- `AWS_S3_ACCESS_KEY`: Lambda認証用アクセスキー（サーバー側でのみ利用）
+- `AWS_S3_SECRET`: Lambda認証用シークレット（サーバー側でのみ利用）
+
 ## トラブルシューティング
 
 ### ビルドエラー

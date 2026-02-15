@@ -31,6 +31,14 @@ type Budget =
 
 type DepartMode = "station" | "postal";
 
+type DepartLocationInfo = {
+  latitude: number | null;
+  longitude: number | null;
+  postcode: string | null;
+  city: string | null;
+  prefecture: string | null;
+};
+
 type Range = DateRange;
 
 type GeneratePayload = {
@@ -94,6 +102,13 @@ export default function PlanPage() {
   const [ogpItems, setOgpItems] = useState<Ogp[]>([]);
   const [classifiedPlaces, setClassifiedPlaces] = useState<Array<{url: string; category: string; name: string; address: string}>>([]);
   const [departCoords, setDepartCoords] = useState<{lat: number; lon: number} | null>(null);
+  const [departLocationInfo, setDepartLocationInfo] = useState<DepartLocationInfo>({
+    latitude: null,
+    longitude: null,
+    postcode: null,
+    city: null,
+    prefecture: null,
+  });
   
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [range, setRange] = useState<Range | undefined>(undefined);
@@ -182,6 +197,13 @@ export default function PlanPage() {
         setDepartMode(data.departMode || "postal");
         setDepartSelected(data.departSelected || null);
         setDepartCoords(data.departCoords || null);
+        setDepartLocationInfo({
+          latitude: data.departLocationInfo?.latitude ?? data.departCoords?.lat ?? null,
+          longitude: data.departLocationInfo?.longitude ?? data.departCoords?.lon ?? null,
+          postcode: data.departLocationInfo?.postcode ?? null,
+          city: data.departLocationInfo?.city ?? null,
+          prefecture: data.departLocationInfo?.prefecture ?? null,
+        });
       } catch {
         // ignore
       }
@@ -290,12 +312,20 @@ export default function PlanPage() {
               const postal = addr.postcode || "";
               const city = addr.city || addr.town || addr.village || "";
               const state = addr.state || "";
+              setDepartCoords({ lat: latitude, lon: longitude });
+
+              setDepartLocationInfo({
+                latitude,
+                longitude,
+                postcode: postal || null,
+                city: city || null,
+                prefecture: state || null,
+              });
               
               if (postal) {
                 const location = `${postal} ${state}${city}`;
                 setDepartMode("postal");
                 setDepartSelected(location);
-                setDepartCoords({ lat: latitude, lon: longitude });
               } else {
                 alert("郵便番号の取得に失敗しました");
               }
@@ -364,7 +394,8 @@ export default function PlanPage() {
       depart: {
         type: departMode,
         value: departSelected,
-        coords: departCoords
+        coords: departCoords,
+        locationInfo: departLocationInfo,
       },
       destination:
         ogpItems.length > 0
@@ -404,7 +435,8 @@ export default function PlanPage() {
         showDetails,
         departMode,
         departSelected,
-        departCoords
+        departCoords,
+        departLocationInfo,
       };
       sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
 
@@ -503,6 +535,14 @@ export default function PlanPage() {
                   setDepartMode("postal");
                   setDepartInput("");
                   setDepartSelected(null);
+                  setDepartCoords(null);
+                  setDepartLocationInfo({
+                    latitude: null,
+                    longitude: null,
+                    postcode: null,
+                    city: null,
+                    prefecture: null,
+                  });
                 }}
                 className={`flex-1 py-2 text-sm font-bold ${
                   departMode === "postal"
@@ -518,6 +558,14 @@ export default function PlanPage() {
                   setDepartMode("station");
                   setDepartInput("");
                   setDepartSelected(null);
+                  setDepartCoords(null);
+                  setDepartLocationInfo({
+                    latitude: null,
+                    longitude: null,
+                    postcode: null,
+                    city: null,
+                    prefecture: null,
+                  });
                 }}
                 className={`flex-1 py-2 text-sm font-bold ${
                   departMode === "station"
@@ -539,6 +587,13 @@ export default function PlanPage() {
                         setDepartSelected(null);
                         setDepartInput("");
                         setDepartCoords(null);
+                        setDepartLocationInfo({
+                          latitude: null,
+                          longitude: null,
+                          postcode: null,
+                          city: null,
+                          prefecture: null,
+                        });
                     }}
                     className="h-8 w-10 text-xs text-white bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center"
                     >
@@ -568,6 +623,13 @@ export default function PlanPage() {
                         onClick={() => {
                           setDepartSelected(c);
                           setDepartCandidates([]);
+                          setDepartLocationInfo({
+                            latitude: departLocationInfo.latitude,
+                            longitude: departLocationInfo.longitude,
+                            postcode: departMode === "postal" ? c.split(" ")[0] || null : null,
+                            city: departMode === "postal" ? c.replace(/^\S+\s*/, "") || null : null,
+                            prefecture: departMode === "postal" ? (c.replace(/^\S+\s*/, "").match(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/)?.[0] || null) : null,
+                          });
                         }}
                         className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm"
                       >
@@ -766,6 +828,8 @@ export default function PlanPage() {
                   classifiedPlaces,
                   departSelected,
                   departMode,
+                  departCoords,
+                  departLocationInfo,
                   people,
                   companion,
                   budget,

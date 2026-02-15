@@ -19,6 +19,38 @@ type LogEntry = {
   };
 };
 
+function truncateString(value: string, max = 2000): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}...<truncated>`;
+}
+
+function sanitizeLogEntry(entry: LogEntry): LogEntry {
+  const cloned: LogEntry = {
+    ...entry,
+    message: truncateString(entry.message, 1000),
+    context: entry.context ? { ...entry.context } : undefined,
+  };
+
+  if (entry.data !== undefined) {
+    try {
+      cloned.data = JSON.parse(
+        truncateString(JSON.stringify(entry.data), 6000)
+      );
+    } catch {
+      cloned.data = { note: "unserializable_data" };
+    }
+  }
+
+  if (entry.error) {
+    cloned.error = {
+      message: truncateString(entry.error.message, 1000),
+      stack: entry.error.stack ? truncateString(entry.error.stack, 4000) : undefined,
+    };
+  }
+
+  return cloned;
+}
+
 class Logger {
   private context: LogContext = {};
 
@@ -59,8 +91,32 @@ class Logger {
       if (error.stack) console.error(error.stack);
     }
 
-    // TODO: Send to external service (Datadog, Sentry, etc.)
-    // await this.sendToExternalService(entry);
+    void this.sendToAwsLambda(sanitizeLogEntry(entry));
+  }
+
+  private async sendToAwsLambda(entry: LogEntry) {
+    const lambdaUrl = process.env.AWS_LOG_LAMBDA_URL;
+    const accessKey = process.env.AWS_S3_ACCESS_KEY;
+    const secret = process.env.AWS_S3_SECRET;
+
+    if (!lambdaUrl || !accessKey || !secret) {
+      return;
+    }
+
+    try {
+      await fetch(lambdaUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-aws-access-key": accessKey,
+          "x-aws-secret": secret,
+        },
+        body: JSON.stringify(entry),
+        cache: "no-store",
+      });
+    } catch (sendError) {
+      console.error("[LOGGER] Failed to send log to AWS Lambda:", sendError);
+    }
   }
 
   info(message: string, data?: any) {

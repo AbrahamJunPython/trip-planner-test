@@ -118,6 +118,28 @@ async function generateWithPreset(input: any, preset: any): Promise<any> {
 
 export const runtime = "nodejs";
 
+async function callAwsLambdaGenerate(body: unknown): Promise<Response | null> {
+  const lambdaUrl = process.env.AWS_LAMBDA_GENERATE_URL;
+  if (!lambdaUrl) return null;
+
+  const accessKey = process.env.AWS_S3_ACCESS_KEY;
+  const secret = process.env.AWS_S3_SECRET;
+  if (!accessKey || !secret) {
+    throw new Error("AWS Lambda auth env vars are missing");
+  }
+
+  return fetch(lambdaUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-aws-access-key": accessKey,
+      "x-aws-secret": secret,
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+}
+
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   try {
@@ -161,7 +183,47 @@ export async function POST(req: NextRequest) {
     }
 
     // fallback（/api/generate がSSEならそのまま中継）
-    logger.info("Generate-stream fallback to /api/generate", {
+        // AWS Lambda route (if configured)
+    if (process.env.AWS_LAMBDA_GENERATE_URL) {
+      logger.info("Generate-stream trying AWS Lambda", {
+        detectedDest,
+        duration: `${Date.now() - startTime}ms`,
+      });
+
+      try {
+        const lambdaRes = await callAwsLambdaGenerate(body);
+        if (lambdaRes && lambdaRes.ok) {
+          const contentType = lambdaRes.headers.get("content-type") ?? "application/json; charset=utf-8";
+          logger.info("Generate-stream AWS Lambda success", {
+            status: lambdaRes.status,
+            contentType,
+            duration: `${Date.now() - startTime}ms`,
+          });
+
+          return new Response(lambdaRes.body, {
+            status: 200,
+            headers: {
+              "Content-Type": contentType,
+              "Cache-Control": "no-store",
+            },
+          });
+        }
+
+        const lambdaErrorBody = lambdaRes ? await lambdaRes.text() : "";
+        logger.warn("Generate-stream AWS Lambda returned error", {
+          status: lambdaRes?.status ?? null,
+          bodyPreview: lambdaErrorBody.slice(0, 200),
+          duration: `${Date.now() - startTime}ms`,
+        });
+      } catch (lambdaError) {
+        logger.error("Generate-stream AWS Lambda call failed", lambdaError as Error, {
+          duration: `${Date.now() - startTime}ms`,
+        });
+      }
+    }
+
+    // fallback (local /api/generate)
+    logger.info("Generate-stream fallback to local /api/generate", {
       detectedDest,
       duration: `${Date.now() - startTime}ms`,
     });
