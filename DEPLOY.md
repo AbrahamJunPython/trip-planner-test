@@ -70,3 +70,46 @@ npm run build
 - APIキーを含むファイル
 
 `.gitignore`で除外されていることを確認してください。
+
+## CloudWatch 集計クエリ例
+
+`aws_meta.log_class` と `data.event_type` を軸に日次確認する想定です。
+
+### 1. 日次イベント件数（event_type）
+```sql
+fields @timestamp, data.event_type, data.page
+| filter data.event_type != null
+| stats count(*) as events by bin(1d), data.event_type, data.page
+| sort bin(1d) desc
+```
+
+### 2. 予約導線クリック件数（offer_id別）
+```sql
+fields @timestamp, data.event_type, data.metadata.offer_id, data.sessionId
+| filter data.event_type in ["click", "ui_click", "reservation_click"]
+| filter ispresent(data.metadata.offer_id)
+| stats count(*) as clicks, count_distinct(data.sessionId) as sessions by bin(1d), data.metadata.offer_id
+| sort bin(1d) desc, clicks desc
+```
+
+### 3. KPI（初回応答/描画）達成率
+```sql
+fields @timestamp, data.event_type, data.metadata.first_response_ms, data.metadata.result_render_ms, data.metadata.kpi_target_ms
+| filter data.event_type = "kpi_first_response"
+| stats
+    avg(data.metadata.first_response_ms) as avg_first_response_ms,
+    avg(data.metadata.result_render_ms) as avg_result_render_ms,
+    sum(if(data.metadata.achieved = true, 1, 0)) as achieved_count,
+    count(*) as total_count
+  by bin(1d)
+| display avg_first_response_ms, avg_result_render_ms, achieved_count, total_count, (achieved_count*100.0/total_count) as achieved_rate_pct
+| sort bin(1d) desc
+```
+
+### 4. エラー分類件数（aws_meta）
+```sql
+fields @timestamp, aws_meta.log_class, context.endpoint, level
+| filter level in ["warn", "error"] or aws_meta.log_class = "user_event"
+| stats count(*) as logs by bin(1d), aws_meta.log_class, context.endpoint
+| sort bin(1d) desc
+```

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,11 +20,11 @@ export default function TaskPage() {
   const hasLoggedPageViewRef = useRef(false);
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "reservation_click";
+    event_type: "page_view" | "reservation_click" | "click";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
-  }) => {
+  }): { sessionId: string | null; userId: string | null; deviceId: string | null; flowId: string | null } => {
     const createId = () => {
       if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
         return crypto.randomUUID();
@@ -71,6 +71,31 @@ export default function TaskPage() {
     } catch {
       // ignore logging errors on UI path
     }
+    return {
+      sessionId,
+      userId,
+      deviceId,
+      flowId,
+    };
+  };
+
+  const buildGoUrl = (offerId: string, targetUrl: string, itemId: string) => {
+    const sessionId =
+      typeof window !== "undefined" ? sessionStorage.getItem("analytics_session_id") : null;
+    const userId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_user_id") : null;
+    const deviceId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_device_id") : null;
+    const flowId = typeof window !== "undefined" ? sessionStorage.getItem("plan_flow_id") : null;
+    const q = new URLSearchParams();
+    q.set("target", targetUrl);
+    if (sessionId) q.set("session_id", sessionId);
+    if (userId) q.set("user_id", userId);
+    if (deviceId) q.set("device_id", deviceId);
+    if (flowId) q.set("flow_id", flowId);
+    q.set("item_id", itemId);
+    q.set("page", "/task");
+    return `/go/${encodeURIComponent(offerId)}?${q.toString()}`;
   };
 
   useEffect(() => {
@@ -82,7 +107,7 @@ export default function TaskPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/task",
       metadata: {
         source: "task_page",
@@ -91,10 +116,10 @@ export default function TaskPage() {
   }, []);
 
   const iconMap: Record<string, string> = {
-    visit: "📍",
-    food: "🍜",
-    hotel: "🛌",
-    move: "🚃"
+    visit: "ðŸ“",
+    food: "ðŸœ",
+    hotel: "ðŸ›Œ",
+    move: "ðŸšƒ"
   };
 
   const removeTask = (index: number) => {
@@ -112,17 +137,17 @@ export default function TaskPage() {
             onClick={() => router.back()}
             className="text-emerald-500 font-bold"
           >
-            戻る
+            æˆ»ã‚‹
           </button>
           <img src="/cocoico-ai.png" alt="cocoico" className="h-10" />
           <div className="w-16"></div>
         </div>
 
-        <h2 className="text-lg font-bold mb-4">やることリスト</h2>
+        <h2 className="text-lg font-bold mb-4">ã‚„ã‚‹ã“ã¨ãƒªã‚¹ãƒˆ</h2>
 
         {tasks.length === 0 ? (
           <div className="text-center text-gray-500 py-12">
-            タスクがありません
+            ã‚¿ã‚¹ã‚¯ãŒã‚ã‚Šã¾ã›ã‚“
           </div>
         ) : (
           <div className="space-y-4">
@@ -135,14 +160,14 @@ export default function TaskPage() {
                   onClick={() => removeTask(idx)}
                   className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-xl font-bold"
                 >
-                  ×
+                  Ã—
                 </button>
                 <div className="flex items-start gap-3">
                   <button
                     onClick={() => setExpandedIndex(expandedIndex === idx ? null : idx)}
                     className="text-2xl cursor-pointer hover:opacity-70"
                   >
-                    {iconMap[task.category] || "📍"}
+                    {iconMap[task.category] || "ðŸ“"}
                   </button>
                   <div className="flex-1">
                     <div style={{fontSize: '13px'}} className="font-bold text-base">{task.name}</div>
@@ -155,36 +180,68 @@ export default function TaskPage() {
                       </div>
                     )}
                     <div className="flex gap-2 mt-3">
+                      {(() => {
+                        const itemId = createItemIdFromUrl(task.url);
+                        const offerId = `task_reserve_${itemId}`;
+                        const goUrl = buildGoUrl(offerId, task.url, itemId);
+                        return (
                       <a
-                        href={task.url}
+                        href={goUrl}
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => {
                           sendClientLog({
-                            eventType: "reservation_click",
+                            event_type: "reservation_click",
                             page: "/task",
                             targetUrl: task.url,
                             metadata: {
-                              item_id: createItemIdFromUrl(task.url),
+                              item_id: itemId,
+                              offer_id: offerId,
                               task_name: task.name,
                               category: task.category,
                               address: task.address,
                               official_url: task.officialUrl || null,
                             },
                           });
+                          sendClientLog({
+                            event_type: "click",
+                            page: "/task",
+                            targetUrl: task.url,
+                            metadata: {
+                              item_id: itemId,
+                              offer_id: offerId,
+                            },
+                          });
                         }}
                         className="px-4 py-2 bg-blue-500 text-white rounded-xl text-xs font-bold hover:bg-blue-600"
                       >
-                        予約
+                        äºˆç´„
                       </a>
+                        );
+                      })()}
                       {task.officialUrl && task.officialUrl !== task.url && (
                         <a
-                          href={task.officialUrl}
+                          href={buildGoUrl(
+                            `task_official_${createItemIdFromUrl(task.url)}`,
+                            task.officialUrl,
+                            createItemIdFromUrl(task.url)
+                          )}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={() =>
+                            sendClientLog({
+                              event_type: "click",
+                              page: "/task",
+                              targetUrl: task.officialUrl,
+                              metadata: {
+                                item_id: createItemIdFromUrl(task.url),
+                                offer_id: `task_official_${createItemIdFromUrl(task.url)}`,
+                              },
+                            })
+                          }
                           className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600"
                         >
-                          公式URL
+                          å…¬å¼URL
                         </a>
                       )}
                     </div>
@@ -198,3 +255,4 @@ export default function TaskPage() {
     </main>
   );
 }
+

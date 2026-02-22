@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,19 +16,19 @@ import { createFlowId, createItemIdFromUrl, normalizeTrackUrl } from "../lib/ite
  * types
  ===================== */
 type Companion =
-  | "一人旅"
-  | "カップル"
-  | "友達同士"
-  | "子供連れ"
-  | "大人だけの家族旅行"
-  | "その他";
+  | "ä¸€äººæ—…"
+  | "ã‚«ãƒƒãƒ—ãƒ«"
+  | "å‹é”åŒå£«"
+  | "å­ä¾›é€£ã‚Œ"
+  | "å¤§äººã ã‘ã®å®¶æ—æ—…è¡Œ"
+  | "ãã®ä»–";
 
 type Budget =
-  | "出費を最低限に抑えた旅行"
-  | "安く抑えつつ旅先を満喫"
-  | "出し惜しみせずに旅先を堪能"
-  | "ちょっぴり贅沢で特別な旅行"
-  | "高級なラグジュアリー旅行";
+  | "å‡ºè²»ã‚’æœ€ä½Žé™ã«æŠ‘ãˆãŸæ—…è¡Œ"
+  | "å®‰ãæŠ‘ãˆã¤ã¤æ—…å…ˆã‚’æº€å–«"
+  | "å‡ºã—æƒœã—ã¿ã›ãšã«æ—…å…ˆã‚’å ªèƒ½"
+  | "ã¡ã‚‡ã£ã´ã‚Šè´…æ²¢ã§ç‰¹åˆ¥ãªæ—…è¡Œ"
+  | "é«˜ç´šãªãƒ©ã‚°ã‚¸ãƒ¥ã‚¢ãƒªãƒ¼æ—…è¡Œ";
 
 type DepartMode = "station" | "postal";
 
@@ -95,18 +95,18 @@ type IntegratedItemLog = {
   } | null;
 };
 
-// 生成APIの返却（例）
+// ç”ŸæˆAPIã®è¿”å´ï¼ˆä¾‹ï¼‰
 type ItineraryResponse = {
   tripName: string;
-  summary: string; // 1〜2行
+  summary: string; // 1ã€œ2è¡Œ
   days: Array<{
     dayIndex: number;        // 1,2,3...
-    date?: string | null;    // "2026-02-07" など（任意）
-    title?: string | null;   // "京都王道"みたいな
+    date?: string | null;    // "2026-02-07" ãªã©ï¼ˆä»»æ„ï¼‰
+    title?: string | null;   // "äº¬éƒ½çŽ‹é“"ã¿ãŸã„ãª
     items: Array<{
       kind: "move" | "visit" | "food" | "hotel" | "other";
-      title: string;               // "伏見稲荷大社"
-      detail?: string | null;      // "2〜3時間 / 混雑回避..." など
+      title: string;               // "ä¼è¦‹ç¨²è·å¤§ç¤¾"
+      detail?: string | null;      // "2ã€œ3æ™‚é–“ / æ··é›‘å›žé¿..." ãªã©
       durationMin?: number | null; // 120
       costYenPerPerson?: number | null;
       url?: string | null;
@@ -131,7 +131,7 @@ export default function PlanPage() {
   /* =====================
    * state
    ===================== */
-  const [tripName, setTripName] = useState("新しい旅行");
+  const [tripName, setTripName] = useState("æ–°ã—ã„æ—…è¡Œ");
 
   const [destinationText, setDestinationText] = useState("");
   const [ogpUrls, setOgpUrls] = useState<string[]>([]);
@@ -176,7 +176,7 @@ export default function PlanPage() {
   const selectedClass = "mt-1 w-full rounded-2xl border border-gray-200 p-3 bg-white font-bold text-emerald-500";
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "ai_consult_click" | "item_stage" | "ai_consult_snapshot";
+    event_type: "page_view" | "ai_consult_click" | "item_stage" | "ai_consult_snapshot";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
@@ -257,7 +257,7 @@ export default function PlanPage() {
     metadata?: Record<string, unknown>
   ) => {
     sendClientLog({
-      eventType: "item_stage",
+      event_type: "item_stage",
       page: "/plan",
       metadata: {
         stage,
@@ -270,19 +270,19 @@ export default function PlanPage() {
   };
 
   /* =====================
-   * 行き先URL管理
+   * è¡Œãå…ˆURLç®¡ç†
    ===================== */
   const [newUrl, setNewUrl] = useState("");
 
   /* =====================
-   * プリフェッチ実装
+   * ãƒ—ãƒªãƒ•ã‚§ãƒƒãƒå®Ÿè£…
    ===================== */
   const debouncedUrl = useDebounce(newUrl, 500);
   
   useEffect(() => {
     if (!debouncedUrl || !debouncedUrl.startsWith('http')) return;
     
-    // バックグラウンドでOGP取得開始（結果は使わない）
+    // ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§OGPå–å¾—é–‹å§‹ï¼ˆçµæžœã¯ä½¿ã‚ãªã„ï¼‰
     fetch('/api/ogp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -393,7 +393,7 @@ export default function PlanPage() {
     if (savedData) {
       try {
         const data = JSON.parse(savedData);
-        setTripName(data.tripName || "新しい旅行");
+        setTripName(data.tripName || "æ–°ã—ã„æ—…è¡Œ");
         setDestinationText(data.destinationText || "");
         setOgpUrls(data.ogpUrls || []);
         if (data.range) {
@@ -433,7 +433,7 @@ export default function PlanPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/plan",
       metadata: {
         source: "plan_page",
@@ -442,7 +442,7 @@ export default function PlanPage() {
   }, []);
 
   /* =====================
-   * OGP fetch & classify (並列処理最適化)
+   * OGP fetch & classify (ä¸¦åˆ—å‡¦ç†æœ€é©åŒ–)
    ===================== */
   useEffect(() => {
     if (ogpUrls.length === 0) return;
@@ -454,11 +454,11 @@ export default function PlanPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ urls: ogpUrls, flow_id: ensureFlowId() }),
         });
-        if (!res.ok) throw new Error('OGP取得に失敗しました');
+        if (!res.ok) throw new Error('OGPå–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ');
         const data = await res.json().catch(() => ({ results: [] }));
         setOgpItems(data.results ?? []);
         
-        // ✅ 並列処理: 全URLを同時にclassify
+        // âœ… ä¸¦åˆ—å‡¦ç†: å…¨URLã‚’åŒæ™‚ã«classify
         const classified: ClassifiedPlaceState[] = await Promise.all(
           (data.results ?? []).map(async (item: Ogp) => {
             const itemId = createItemIdFromUrl(item.url);
@@ -523,7 +523,7 @@ export default function PlanPage() {
   }, [ogpUrls]);
 
   /* =====================
-   * 出発地 候補検索
+   * å‡ºç™ºåœ° å€™è£œæ¤œç´¢
    ===================== */
   useEffect(() => {
     if (!debouncedDepartInput) {
@@ -540,11 +540,11 @@ export default function PlanPage() {
   };
 
   /* =====================
-   * 現在地取得
+   * ç¾åœ¨åœ°å–å¾—
    ===================== */
   const getCurrentLocation = async () => {
     if (!navigator.geolocation) {
-      alert("お使いのブラウザは位置情報に対応していません");
+      alert("ãŠä½¿ã„ã®ãƒ–ãƒ©ã‚¦ã‚¶ã¯ä½ç½®æƒ…å ±ã«å¯¾å¿œã—ã¦ã„ã¾ã›ã‚“");
       return;
     }
 
@@ -579,25 +579,25 @@ export default function PlanPage() {
                 setDepartMode("postal");
                 setDepartSelected(location);
               } else {
-                alert("郵便番号の取得に失敗しました");
+                alert("éƒµä¾¿ç•ªå·ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
               }
             } else {
-              alert("住所情報の取得に失敗しました");
+              alert("ä½æ‰€æƒ…å ±ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
             }
           } else {
             console.warn("reverse-geocode failed", await res.text());
-            alert("位置情報の取得に失敗しました");
+            alert("ä½ç½®æƒ…å ±ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
           }
         } catch (err) {
           console.error("Location error:", err);
-          alert("位置情報の取得に失敗しました");
+          alert("ä½ç½®æƒ…å ±ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
         } finally {
           setIsGettingLocation(false);
         }
       },
       (err) => {
         console.error("Geolocation error:", err);
-        alert("位置情報の取得が拒否されました");
+        alert("ä½ç½®æƒ…å ±ã®å–å¾—ãŒæ‹’å¦ã•ã‚Œã¾ã—ãŸ");
         setIsGettingLocation(false);
       }
     );
@@ -619,7 +619,7 @@ export default function PlanPage() {
     setIsGenerating(true);
     setLoadingPhase("premise");
 
-    // 旅行日数を計算
+    // æ—…è¡Œæ—¥æ•°ã‚’è¨ˆç®—
     let calculatedTripDays = 1;
     let calculatedStayDays = 0;
     
@@ -721,12 +721,12 @@ export default function PlanPage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-          const msg = data?.error ? data.error : "プラン生成に失敗しました";
+          const msg = data?.error ? data.error : "ãƒ—ãƒ©ãƒ³ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ";
           throw new Error(msg);
       }
 
       if (!data?.itinerary) {
-          throw new Error(data?.error || "生成結果が空でした");
+          throw new Error(data?.error || "ç”ŸæˆçµæžœãŒç©ºã§ã—ãŸ");
       }
 
       sessionStorage.setItem("trip_result_json", JSON.stringify(data.itinerary));
@@ -734,7 +734,7 @@ export default function PlanPage() {
       router.push("/result");
     } catch (error) {
       console.error("Generate error:", error);
-      alert(error instanceof Error ? error.message : "エラーが発生しました");
+      alert(error instanceof Error ? error.message : "ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸ");
     } finally {
       setIsGenerating(false);
     }
@@ -765,21 +765,21 @@ export default function PlanPage() {
 
         <div className="space-y-8">
           {/* =====================
-              出発地
+              å‡ºç™ºåœ°
              ===================== */}
           <div>
-            <span className="text-sm font-bold">出発地</span>
-            {/* 現在地取得ボタン */}
+            <span className="text-sm font-bold">å‡ºç™ºåœ°</span>
+            {/* ç¾åœ¨åœ°å–å¾—ãƒœã‚¿ãƒ³ */}
             <button
               type="button"
               onClick={getCurrentLocation}
               disabled={isGettingLocation}
               className="mt-2 w-full py-2 px-4 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2"
-              aria-label="現在地から出発地を設定"
+              aria-label="ç¾åœ¨åœ°ã‹ã‚‰å‡ºç™ºåœ°ã‚’è¨­å®š"
             >
-              {isGettingLocation ? "取得中..." : "📍 現在地から設定"}
+              {isGettingLocation ? "å–å¾—ä¸­..." : "ðŸ“ ç¾åœ¨åœ°ã‹ã‚‰è¨­å®š"}
             </button>
-            {/* タブ */}
+            {/* ã‚¿ãƒ– */}
             <div className="mt-2 flex rounded-2xl border border-gray-200 overflow-hidden">
               <button
                 type="button"
@@ -802,7 +802,7 @@ export default function PlanPage() {
                     : "bg-white text-gray-600"
                 }`}
               >
-                郵便番号
+                éƒµä¾¿ç•ªå·
               </button>
               <button
                 type="button"
@@ -825,11 +825,11 @@ export default function PlanPage() {
                     : "bg-white text-gray-600"
                 }`}
               >
-                最寄駅
+                æœ€å¯„é§…
               </button>
             </div>
 
-            {/* 入力 or 確定表示 */}
+            {/* å…¥åŠ› or ç¢ºå®šè¡¨ç¤º */}
             {departSelected ? (
                 <div className="mt-2 flex items-center gap-2">
                     <div className={selectedClass}>{departSelected}</div>
@@ -849,7 +849,7 @@ export default function PlanPage() {
                     }}
                     className="h-8 w-10 text-xs text-white bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center"
                     >
-                    変更
+                    å¤‰æ›´
                     </button>
                 </div>
             ) : (
@@ -859,13 +859,13 @@ export default function PlanPage() {
                   onChange={(e) => setDepartInput(e.target.value)}
                   placeholder={
                     departMode === "station"
-                      ? "例：東京駅　*現在はJR山手線のみ対応"
-                      : "例：1500001 *半角数字7桁"
+                      ? "ä¾‹ï¼šæ±äº¬é§…ã€€*ç¾åœ¨ã¯JRå±±æ‰‹ç·šã®ã¿å¯¾å¿œ"
+                      : "ä¾‹ï¼š1500001 *åŠè§’æ•°å­—7æ¡"
                   }
                   className={`${inputClass} mt-2`}
                 />
 
-                {/* 候補 */}
+                {/* å€™è£œ */}
                 {departCandidates.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow">
                     {departCandidates.map((c) => (
@@ -880,7 +880,7 @@ export default function PlanPage() {
                             longitude: departLocationInfo.longitude,
                             postcode: departMode === "postal" ? c.split(" ")[0] || null : null,
                             city: departMode === "postal" ? c.replace(/^\S+\s*/, "") || null : null,
-                            prefecture: departMode === "postal" ? (c.replace(/^\S+\s*/, "").match(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/)?.[0] || null) : null,
+                            prefecture: departMode === "postal" ? (c.replace(/^\S+\s*/, "").match(/^(æ±äº¬éƒ½|åŒ—æµ·é“|(?:äº¬éƒ½|å¤§é˜ª)åºœ|.{2,3}çœŒ)/)?.[0] || null) : null,
                           });
                         }}
                         className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm"
@@ -895,26 +895,26 @@ export default function PlanPage() {
           </div>
 
           {/* =====================
-              行き先
+              è¡Œãå…ˆ
              ===================== */}
           <div>
-            <span className="text-sm font-bold">行き先</span>
+            <span className="text-sm font-bold">è¡Œãå…ˆ</span>
 
-            {/* URL追加入力 */}
+            {/* URLè¿½åŠ å…¥åŠ› */}
             <div className="mt-2 flex gap-2">
               <input
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
-                placeholder="URLを追加（例：https://example.com）"
+                placeholder="URLã‚’è¿½åŠ ï¼ˆä¾‹ï¼šhttps://example.comï¼‰"
                 className="flex-1 rounded-2xl border border-gray-200 p-3 bg-white text-sm"
               />
               <button
                 type="button"
                 onClick={addDestinationUrl}
                 className="px-4 py-2 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600"
-                aria-label="行き先URLを追加"
+                aria-label="è¡Œãå…ˆURLã‚’è¿½åŠ "
               >
-                追加
+                è¿½åŠ 
               </button>
             </div>
 
@@ -928,65 +928,65 @@ export default function PlanPage() {
               <input
                 value={destinationText}
                 onChange={(e) => setDestinationText(e.target.value)}
-                placeholder="行先 - 未定"
+                placeholder="è¡Œå…ˆ - æœªå®š"
                 className={destinationText ? selectedClass : inputClass}
               />
             )}
           </div>
 
           {/* =====================
-              詳細情報トグル
+              è©³ç´°æƒ…å ±ãƒˆã‚°ãƒ«
              ===================== */}
           <button
             type="button"
             onClick={() => setShowDetails(!showDetails)}
             className="w-full h-10 rounded-2xl p-3 bg-emerald-500 hover:bg-gray-500 text-sm font-bold text-white flex items-center justify-between"
           >
-            <span>カスタマイズ</span>
-            <span className="text-xl">{showDetails ? "▲" : "▼"}</span>
+            <span>ã‚«ã‚¹ã‚¿ãƒžã‚¤ã‚º</span>
+            <span className="text-xl">{showDetails ? "â–²" : "â–¼"}</span>
           </button>
 
           {/* =====================
-              詳細情報（折り畳み）
+              è©³ç´°æƒ…å ±ï¼ˆæŠ˜ã‚Šç•³ã¿ï¼‰
              ===================== */}
           {showDetails && (
             <div className="space-y-8">
-              {/* 性別・年齢 */}
+              {/* æ€§åˆ¥ãƒ»å¹´é½¢ */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-sm font-bold">あなたの性別</span>
+                  <span className="text-sm font-bold">ã‚ãªãŸã®æ€§åˆ¥</span>
                   <select
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
                     className={gender ? selectedClass : inputClass}
                   >
-                    <option value="">無回答</option>
-                    <option value="男性">男性</option>
-                    <option value="女性">女性</option>
+                    <option value="">ç„¡å›žç­”</option>
+                    <option value="ç”·æ€§">ç”·æ€§</option>
+                    <option value="å¥³æ€§">å¥³æ€§</option>
                   </select>
                 </div>
                 <div>
-                  <span className="text-sm font-bold">あなたの年齢</span>
+                  <span className="text-sm font-bold">ã‚ãªãŸã®å¹´é½¢</span>
                   <select
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
                     className={age ? selectedClass : inputClass}
                   >
-                    <option value="">無回答</option>
-                    <option value="10代">10代</option>
-                    <option value="20代">20代</option>
-                    <option value="30代">30代</option>
-                    <option value="40代">40代</option>
-                    <option value="50代">50代</option>
-                    <option value="60代">60代</option>
-                    <option value="70代">70代</option>
+                    <option value="">ç„¡å›žç­”</option>
+                    <option value="10ä»£">10ä»£</option>
+                    <option value="20ä»£">20ä»£</option>
+                    <option value="30ä»£">30ä»£</option>
+                    <option value="40ä»£">40ä»£</option>
+                    <option value="50ä»£">50ä»£</option>
+                    <option value="60ä»£">60ä»£</option>
+                    <option value="70ä»£">70ä»£</option>
                   </select>
                 </div>
               </div>
 
-              {/*人数*/}
+              {/*äººæ•°*/}
               <div>
-                <span className="text-sm font-bold">人数</span>
+                <span className="text-sm font-bold">äººæ•°</span>
                 <select
                   value={people}
                   onChange={(e) =>
@@ -994,71 +994,71 @@ export default function PlanPage() {
                   }
                   className={people ? selectedClass : inputClass}
                 >
-                  <option value="">人数 - 未定</option>
+                  <option value="">äººæ•° - æœªå®š</option>
                   {Array.from({ length: 9 }, (_, i) => (
                     <option key={i + 1} value={i + 1}>
-                      {i + 1}人
+                      {i + 1}äºº
                     </option>
                   ))}
-                  <option value={10}>10人以上</option>
+                  <option value={10}>10äººä»¥ä¸Š</option>
                 </select>
               </div>
 
               {/* =====================
-                  同行者
+                  åŒè¡Œè€…
                  ===================== */}
               <div>
-                <span className="text-sm font-bold">同行者</span>
+                <span className="text-sm font-bold">åŒè¡Œè€…</span>
                 <select
                   value={companion}
                   onChange={(e) => {
                     const val = e.target.value;
-                    if (val === "" || val === "一人旅" || val === "カップル" || val === "友達同士" || val === "子供連れ" || val === "大人だけの家族旅行" || val === "その他") {
+                    if (val === "" || val === "ä¸€äººæ—…" || val === "ã‚«ãƒƒãƒ—ãƒ«" || val === "å‹é”åŒå£«" || val === "å­ä¾›é€£ã‚Œ" || val === "å¤§äººã ã‘ã®å®¶æ—æ—…è¡Œ" || val === "ãã®ä»–") {
                       setCompanion(val === "" ? "" : val);
                     }
                   }}
                   className={companion ? selectedClass : inputClass}
                 >
-                  <option value="">同行者 - 未定</option>
-                  <option value="一人旅">一人旅</option>
-                  <option value="カップル">カップル</option>
-                  <option value="友達同士">友達同士</option>
-                  <option value="子供連れ">子供連れ</option>
-                  <option value="大人だけの家族旅行">大人だけの家族旅行</option>
-                  <option value="その他">その他</option>
+                  <option value="">åŒè¡Œè€… - æœªå®š</option>
+                  <option value="ä¸€äººæ—…">ä¸€äººæ—…</option>
+                  <option value="ã‚«ãƒƒãƒ—ãƒ«">ã‚«ãƒƒãƒ—ãƒ«</option>
+                  <option value="å‹é”åŒå£«">å‹é”åŒå£«</option>
+                  <option value="å­ä¾›é€£ã‚Œ">å­ä¾›é€£ã‚Œ</option>
+                  <option value="å¤§äººã ã‘ã®å®¶æ—æ—…è¡Œ">å¤§äººã ã‘ã®å®¶æ—æ—…è¡Œ</option>
+                  <option value="ãã®ä»–">ãã®ä»–</option>
                 </select>
               </div>
 
               {/* =====================
-                  予算感
+                  äºˆç®—æ„Ÿ
                  ===================== */}
               <div>
-                <span className="text-sm font-bold">予算感</span>
+                <span className="text-sm font-bold">äºˆç®—æ„Ÿ</span>
                 <select
                   value={budget}
                   onChange={(e) => {
                     const val = e.target.value;
-                    if (val === "" || val === "出費を最低限に抑えた旅行" || val === "安く抑えつつ旅先を満喫" || val === "出し惜しみせずに旅先を堪能" || val === "ちょっぴり贅沢で特別な旅行" || val === "高級なラグジュアリー旅行") {
+                    if (val === "" || val === "å‡ºè²»ã‚’æœ€ä½Žé™ã«æŠ‘ãˆãŸæ—…è¡Œ" || val === "å®‰ãæŠ‘ãˆã¤ã¤æ—…å…ˆã‚’æº€å–«" || val === "å‡ºã—æƒœã—ã¿ã›ãšã«æ—…å…ˆã‚’å ªèƒ½" || val === "ã¡ã‚‡ã£ã´ã‚Šè´…æ²¢ã§ç‰¹åˆ¥ãªæ—…è¡Œ" || val === "é«˜ç´šãªãƒ©ã‚°ã‚¸ãƒ¥ã‚¢ãƒªãƒ¼æ—…è¡Œ") {
                       setBudget(val === "" ? "" : val);
                     }
                   }}
                   className={budget ? selectedClass : inputClass}
                 >
-                  <option value="">予算 - 未定</option>
-                  <option value="出費を最低限に抑えた旅行">
-                    1 - 出費を最低限に抑えた旅行
+                  <option value="">äºˆç®— - æœªå®š</option>
+                  <option value="å‡ºè²»ã‚’æœ€ä½Žé™ã«æŠ‘ãˆãŸæ—…è¡Œ">
+                    1 - å‡ºè²»ã‚’æœ€ä½Žé™ã«æŠ‘ãˆãŸæ—…è¡Œ
                   </option>
-                  <option value="安く抑えつつ旅先を満喫">
-                    2 - 安く抑えつつ旅先を満喫
+                  <option value="å®‰ãæŠ‘ãˆã¤ã¤æ—…å…ˆã‚’æº€å–«">
+                    2 - å®‰ãæŠ‘ãˆã¤ã¤æ—…å…ˆã‚’æº€å–«
                   </option>
-                  <option value="出し惜しみせずに旅先を堪能">
-                    3 - 出し惜しみせずに旅先を堪能
+                  <option value="å‡ºã—æƒœã—ã¿ã›ãšã«æ—…å…ˆã‚’å ªèƒ½">
+                    3 - å‡ºã—æƒœã—ã¿ã›ãšã«æ—…å…ˆã‚’å ªèƒ½
                   </option>
-                  <option value="ちょっぴり贅沢で特別な旅行">
-                    4 - ちょっぴり贅沢で特別な旅行
+                  <option value="ã¡ã‚‡ã£ã´ã‚Šè´…æ²¢ã§ç‰¹åˆ¥ãªæ—…è¡Œ">
+                    4 - ã¡ã‚‡ã£ã´ã‚Šè´…æ²¢ã§ç‰¹åˆ¥ãªæ—…è¡Œ
                   </option>
-                  <option value="高級なラグジュアリー旅行">
-                    5 - 高級なラグジュアリー旅行
+                  <option value="é«˜ç´šãªãƒ©ã‚°ã‚¸ãƒ¥ã‚¢ãƒªãƒ¼æ—…è¡Œ">
+                    5 - é«˜ç´šãªãƒ©ã‚°ã‚¸ãƒ¥ã‚¢ãƒªãƒ¼æ—…è¡Œ
                   </option>
                 </select>
               </div>
@@ -1091,7 +1091,7 @@ export default function PlanPage() {
                 };
                 sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
                 sendClientLog({
-                  eventType: "ai_consult_click",
+                  event_type: "ai_consult_click",
                   page: "/plan",
                   targetUrl: "/chat",
                   metadata: {
@@ -1130,7 +1130,7 @@ export default function PlanPage() {
                   };
                 });
                 sendClientLog({
-                  eventType: "ai_consult_snapshot",
+                  event_type: "ai_consult_snapshot",
                   page: "/plan",
                   targetUrl: "/chat",
                   metadata: {
@@ -1150,15 +1150,15 @@ export default function PlanPage() {
               disabled={!departSelected || classifiedPlaces.length === 0}
               className="w-full rounded-2xl bg-blue-500 text-white py-4 font-bold disabled:opacity-40 hover:bg-blue-600"
             >
-              💬 AIと相談する
+              ðŸ’¬ AIã¨ç›¸è«‡ã™ã‚‹
             </button>
             <button
               onClick={generate}
               disabled={!canGenerate}
               className="w-full rounded-2xl bg-orange-400 text-white py-4 font-bold disabled:opacity-40"
-              aria-label="旅行プランを生成"
+              aria-label="æ—…è¡Œãƒ—ãƒ©ãƒ³ã‚’ç”Ÿæˆ"
             >
-              ラフプラン生成
+              ãƒ©ãƒ•ãƒ—ãƒ©ãƒ³ç”Ÿæˆ
             </button>
           </div>
         </div>
@@ -1173,10 +1173,10 @@ export default function PlanPage() {
  ===================== */
 function PlaceCard({ place, onRemove }: { place: {url: string; category: string; name: string; address: string}; onRemove: () => void }) {
   const iconMap: Record<string, string> = {
-    visit: "📍",
-    food: "🍜",
-    hotel: "🛌",
-    move: "🚃"
+    visit: "ðŸ“",
+    food: "ðŸœ",
+    hotel: "ðŸ›Œ",
+    move: "ðŸšƒ"
   };
   
   return (
@@ -1186,7 +1186,7 @@ function PlaceCard({ place, onRemove }: { place: {url: string; category: string;
       rel="noreferrer"
       className="border border-gray-200 rounded-2xl p-3 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors relative"
     >
-      <div className="text-xl">{iconMap[place.category] || "📍"}</div>
+      <div className="text-xl">{iconMap[place.category] || "ðŸ“"}</div>
       <div className="flex-1 min-w-0">
         <div className="font-bold text-sm truncate">{place.name}</div>
         {place.address && (
@@ -1202,7 +1202,7 @@ function PlaceCard({ place, onRemove }: { place: {url: string; category: string;
         }}
         className="text-xl text-red-500 hover:text-red-700 flex-shrink-0 p-1 z-10"
       >
-        ×
+        Ã—
       </button>
     </a>
   );
@@ -1236,9 +1236,10 @@ function OgpCard({ item, onRemove }: { item: Ogp; onRemove: () => void }) {
         onClick={onRemove}
         className="text-xl text-red-500 hover:text-red-700 flex-shrink-0 p-1"
       >
-        ×
+        Ã—
       </button>
     </div>
   );
 }
+
 

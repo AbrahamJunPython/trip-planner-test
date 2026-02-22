@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,7 +14,7 @@ export default function Home() {
   const hasLoggedPageView = useRef(false)
 
   const sendClientLog = (payload: {
-    eventType: 'page_view' | 'start_button_click'
+    event_type: 'page_view' | 'start_button_click'
     page: string
     targetUrl?: string
   }) => {
@@ -66,7 +66,7 @@ export default function Home() {
   const parsedUrls = useMemo(() => {
     if (!rawUrls) return []
 
-    // http(s):// を起点に URL を抽出
+    // http(s):// ã‚’èµ·ç‚¹ã« URL ã‚’æŠ½å‡º
     const matches = rawUrls.match(/https?:\/\/[^\s,]+/g) ?? []
 
     return Array.from(new Set(matches))
@@ -83,7 +83,7 @@ export default function Home() {
       return
     }
 
-    // 1) textareaからURLを消す（チャット置換）
+    // 1) textareaã‹ã‚‰URLã‚’æ¶ˆã™ï¼ˆãƒãƒ£ãƒƒãƒˆç½®æ›ï¼‰
     let cleaned = text
     for (const u of urls) {
       try {
@@ -94,12 +94,12 @@ export default function Home() {
     }
     setRawUrls(cleaned.trim())
 
-    // 2) URLは items 側に残すために、OGP取得を走らせる
-    //    ただし “今すでに表示しているURL” は再取得しない
+    // 2) URLã¯ items å´ã«æ®‹ã™ãŸã‚ã«ã€OGPå–å¾—ã‚’èµ°ã‚‰ã›ã‚‹
+    //    ãŸã ã— â€œä»Šã™ã§ã«è¡¨ç¤ºã—ã¦ã„ã‚‹URLâ€ ã¯å†å–å¾—ã—ãªã„
     const have = new Set(items.map((x) => x.url))
     const need = urls.filter((u) => !have.has(u))
     if (need.length > 0) {
-      // 即時にOGP取得（UX優先）
+      // å³æ™‚ã«OGPå–å¾—ï¼ˆUXå„ªå…ˆï¼‰
       fetchOgpWithUrls(need)
     }
   }
@@ -117,11 +117,11 @@ export default function Home() {
         body: JSON.stringify({ urls }),
       })
 
-      if (!res.ok) throw new Error('OGP取得に失敗しました')
+      if (!res.ok) throw new Error('OGPå–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ')
 
       const data = (await res.json()) as { results: Ogp[] }
 
-      // 既存 items とマージ（urlキー）
+      // æ—¢å­˜ items ã¨ãƒžãƒ¼ã‚¸ï¼ˆurlã‚­ãƒ¼ï¼‰
       setItems((prev) => {
         const map = new Map<string, Ogp>()
         prev.forEach((it) => map.set(it.url, it))
@@ -129,13 +129,13 @@ export default function Home() {
         return Array.from(map.values())
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'エラーが発生しました')
+      setError(e instanceof Error ? e.message : 'ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸ')
     } finally {
       setLoading(false)
     }
   }
 
-  // 既存の「OGPを表示」ボタンは、textarea由来の parsedUrls を取る用途で残せる
+  // æ—¢å­˜ã®ã€ŒOGPã‚’è¡¨ç¤ºã€ãƒœã‚¿ãƒ³ã¯ã€textareaç”±æ¥ã® parsedUrls ã‚’å–ã‚‹ç”¨é€”ã§æ®‹ã›ã‚‹
   const fetchOgp = async () => {
     if (parsedUrls.length === 0) {
       setItems([])
@@ -149,7 +149,7 @@ export default function Home() {
     setItems((prev) => prev.filter((it) => it.url !== url))
   }
 
-  // ✅ デバウンス：入力が止まったら自動取得
+  // âœ… ãƒ‡ãƒã‚¦ãƒ³ã‚¹ï¼šå…¥åŠ›ãŒæ­¢ã¾ã£ãŸã‚‰è‡ªå‹•å–å¾—
   useEffect(() => {
     if (parsedUrls.length === 0) {
       setItems([])
@@ -162,13 +162,13 @@ export default function Home() {
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedUrls]) // parsedUrls が変わったら再スケジュール
+  }, [parsedUrls]) // parsedUrls ãŒå¤‰ã‚ã£ãŸã‚‰å†ã‚¹ã‚±ã‚¸ãƒ¥ãƒ¼ãƒ«
 
   useEffect(() => {
     if (hasLoggedPageView.current) return
     hasLoggedPageView.current = true
     sendClientLog({
-      eventType: 'page_view',
+      event_type: 'page_view',
       page: '/',
     })
   }, [])
@@ -189,11 +189,11 @@ export default function Home() {
       {/* Hero */}
       <section className="mb-16">
         <h1 className="text-[28px] font-bold leading-[1.45] text-emerald-600 mb-10">
-          まず
+          ã¾ãš
           <br />
-          「行ってみたい！」
+          ã€Œè¡Œã£ã¦ã¿ãŸã„ï¼ã€
           <br />
-          をかたちにしよう
+          ã‚’ã‹ãŸã¡ã«ã—ã‚ˆã†
         </h1>
         <div className="mb-8 flex justify-center">
           <Image
@@ -205,7 +205,7 @@ export default function Home() {
           />
         </div>
         <p className="text-[13px] text-gray-600 leading-relaxed mb-10">
-          COCOICO-AIはあなたがソーシャルメディアなど日常生活で発見した行きたい場所までの実行プランを提案してくれるサービスです。
+          COCOICO-AIã¯ã‚ãªãŸãŒã‚½ãƒ¼ã‚·ãƒ£ãƒ«ãƒ¡ãƒ‡ã‚£ã‚¢ãªã©æ—¥å¸¸ç”Ÿæ´»ã§ç™ºè¦‹ã—ãŸè¡ŒããŸã„å ´æ‰€ã¾ã§ã®å®Ÿè¡Œãƒ—ãƒ©ãƒ³ã‚’ææ¡ˆã—ã¦ãã‚Œã‚‹ã‚µãƒ¼ãƒ“ã‚¹ã§ã™ã€‚
         </p>
 
         <button
@@ -213,7 +213,7 @@ export default function Home() {
             try {
               const url = '/plan'
               sendClientLog({
-                eventType: 'start_button_click',
+                event_type: 'start_button_click',
                 page: '/',
                 targetUrl: url,
               })
@@ -225,23 +225,23 @@ export default function Home() {
           }}
           className="inline-flex items-center justify-center px-16 sm:px-32 py-4 rounded-full font-semibold shadow-md transition outline-none border-0 text-[15px] bg-emerald-500 text-white cursor-pointer active:scale-[0.98] whitespace-nowrap"
         >
-          はじめる
+          ã¯ã˜ã‚ã‚‹
         </button>
       </section>
 
       {/* Features */}
       <section className="space-y-16 mt-20">
         <Feature
-          title="比較しない"
-          description="候補を並べません。ひとつだけ提案します。"
+          title="æ¯”è¼ƒã—ãªã„"
+          description="å€™è£œã‚’ä¸¦ã¹ã¾ã›ã‚“ã€‚ã²ã¨ã¤ã ã‘ææ¡ˆã—ã¾ã™ã€‚"
         />
         <Feature
-          title="入力が少ない"
-          description="タップ中心。考えることを減らします。"
+          title="å…¥åŠ›ãŒå°‘ãªã„"
+          description="ã‚¿ãƒƒãƒ—ä¸­å¿ƒã€‚è€ƒãˆã‚‹ã“ã¨ã‚’æ¸›ã‚‰ã—ã¾ã™ã€‚"
         />
         <Feature
-          title="共有できる"
-          description="途中の状態をURLでそのまま共有。"
+          title="å…±æœ‰ã§ãã‚‹"
+          description="é€”ä¸­ã®çŠ¶æ…‹ã‚’URLã§ãã®ã¾ã¾å…±æœ‰ã€‚"
         />
       </section>
     </div>
@@ -261,7 +261,7 @@ function OgpCard({
 
   return (
     <div className="relative p-4 rounded-xl border border-gray-200 bg-white flex gap-4 overflow-hidden">
-      {/* × ボタン */}
+      {/* Ã— ãƒœã‚¿ãƒ³ */}
       <button
         type="button"
         onClick={onRemove}
@@ -274,10 +274,10 @@ function OgpCard({
           active:scale-[0.98]
           transition
         "
-        aria-label="このURLを削除"
-        title="削除"
+        aria-label="ã“ã®URLã‚’å‰Šé™¤"
+        title="å‰Šé™¤"
       >
-        ×
+        Ã—
       </button>
 
       {item.image ? (
@@ -318,4 +318,5 @@ const Feature = ({
     <p className="text-[14px] text-gray-600 leading-relaxed">{description}</p>
   </div>
 )
+
 

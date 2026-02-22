@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -77,17 +77,25 @@ export default function ChatPage() {
     ogpItems: any[];
     integratedContext: ChatIntegratedContext | null;
   }>({ depart: null, ogpItems: [], integratedContext: null });
-  const [tripName, setTripName] = useState("新しい旅行");
+  const [tripName, setTripName] = useState("æ–°ã—ã„æ—…è¡Œ");
   const [isEditingTripName, setIsEditingTripName] = useState(false);
   const hasSentIntegratedContextRef = useRef(false);
   const hasLoggedPageViewRef = useRef(false);
+  const lastQuestionItemIdRef = useRef<string | null>(null);
+  const hasLoggedFirstResponseKpiRef = useRef(false);
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "reservation_click";
+    event_type:
+      | "page_view"
+      | "reservation_click"
+      | "question_shown"
+      | "answer"
+      | "click"
+      | "kpi_first_response";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
-  }) => {
+  }): { sessionId: string | null; userId: string | null; deviceId: string | null; flowId: string | null } => {
     const createId = () => {
       if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
         return crypto.randomUUID();
@@ -134,6 +142,31 @@ export default function ChatPage() {
     } catch {
       // ignore logging errors on UI path
     }
+    return {
+      sessionId,
+      userId,
+      deviceId,
+      flowId,
+    };
+  };
+
+  const buildGoUrl = (offerId: string, targetUrl: string, itemId: string) => {
+    const sessionId =
+      typeof window !== "undefined" ? sessionStorage.getItem("analytics_session_id") : null;
+    const userId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_user_id") : null;
+    const deviceId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_device_id") : null;
+    const flowId = typeof window !== "undefined" ? sessionStorage.getItem("plan_flow_id") : null;
+    const q = new URLSearchParams();
+    q.set("target", targetUrl);
+    if (sessionId) q.set("session_id", sessionId);
+    if (userId) q.set("user_id", userId);
+    if (deviceId) q.set("device_id", deviceId);
+    if (flowId) q.set("flow_id", flowId);
+    q.set("item_id", itemId);
+    q.set("page", "/chat");
+    return `/go/${encodeURIComponent(offerId)}?${q.toString()}`;
   };
 
   useEffect(() => {
@@ -196,7 +229,7 @@ export default function ChatPage() {
             items: integratedItems,
           },
         });
-        setTripName(data.tripName || "新しい旅行");
+        setTripName(data.tripName || "æ–°ã—ã„æ—…è¡Œ");
       } catch {
         router.push("/plan");
       }
@@ -231,7 +264,7 @@ export default function ChatPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/chat",
       metadata: {
         source: "chat_page",
@@ -239,10 +272,28 @@ export default function ChatPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (places.length === 0 || currentIndex >= places.length) return;
+    const currentPlace = places[currentIndex];
+    if (currentPlace.isDisabled) return;
+    const itemId = createItemIdFromUrl(currentPlace.url);
+    if (lastQuestionItemIdRef.current === itemId) return;
+    lastQuestionItemIdRef.current = itemId;
+    sendClientLog({
+      event_type: "question_shown",
+      page: "/chat",
+      metadata: {
+        item_id: itemId,
+        category: currentPlace.category,
+      },
+    });
+  }, [currentIndex, places]);
+
   const fetchPlaceInfo = async () => {
     if (isLoading) return;
     
     setIsLoading(true);
+    const requestStart = performance.now();
     try {
       const currentPlace = places[currentIndex];
       const ogpData = context.ogpItems.find((item: any) => item.url === currentPlace.url);
@@ -259,6 +310,7 @@ export default function ChatPage() {
       });
 
       const data = await res.json().catch(() => ({}));
+      const ttfbMs = Math.round(performance.now() - requestStart);
       if (!res.ok) {
         throw new Error(
           typeof data?.error === "string" ? data.error : `chat_api_failed_${res.status}`
@@ -279,7 +331,7 @@ export default function ChatPage() {
           description:
             typeof data?.description === "string" && data.description
               ? data.description
-              : "情報の取得に失敗しました。削除するか次へ進んでください。",
+              : "æƒ…å ±ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚å‰Šé™¤ã™ã‚‹ã‹æ¬¡ã¸é€²ã‚“ã§ãã ã•ã„ã€‚",
           address:
             typeof data?.address === "string" && data.address
               ? data.address
@@ -298,18 +350,64 @@ export default function ChatPage() {
         };
         return updated;
       });
+      sendClientLog({
+        event_type: "answer",
+        page: "/chat",
+        metadata: {
+          item_id: createItemIdFromUrl(currentPlace.url),
+          success: true,
+        },
+      });
+      if (!hasLoggedFirstResponseKpiRef.current) {
+        hasLoggedFirstResponseKpiRef.current = true;
+        sendClientLog({
+          event_type: "kpi_first_response",
+          page: "/chat",
+          metadata: {
+            item_id: createItemIdFromUrl(currentPlace.url),
+            ttfb_ms: ttfbMs,
+            first_response_ms: Math.round(performance.now() - requestStart),
+            kpi_target_ms: 2000,
+            achieved: Math.round(performance.now() - requestStart) <= 2000,
+          },
+        });
+      }
     } catch (error) {
       console.error("Fetch place info error:", error);
       setPlaces(prev => {
         const updated = [...prev];
         updated[currentIndex] = {
           ...updated[currentIndex],
-          description: "情報の取得に失敗しました。削除するか次へ進んでください。",
+          description: "æƒ…å ±ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚å‰Šé™¤ã™ã‚‹ã‹æ¬¡ã¸é€²ã‚“ã§ãã ã•ã„ã€‚",
           officialUrl: updated[currentIndex].officialUrl || updated[currentIndex].url,
           sourceUrl: updated[currentIndex].sourceUrl || updated[currentIndex].url,
         };
         return updated;
       });
+      sendClientLog({
+        event_type: "answer",
+        page: "/chat",
+        metadata: {
+          item_id: createItemIdFromUrl(currentPlace.url),
+          success: false,
+        },
+      });
+      if (!hasLoggedFirstResponseKpiRef.current) {
+        hasLoggedFirstResponseKpiRef.current = true;
+        const elapsedMs = Math.round(performance.now() - requestStart);
+        sendClientLog({
+          event_type: "kpi_first_response",
+          page: "/chat",
+          metadata: {
+            item_id: createItemIdFromUrl(currentPlace.url),
+            ttfb_ms: elapsedMs,
+            first_response_ms: elapsedMs,
+            kpi_target_ms: 2000,
+            achieved: elapsedMs <= 2000,
+            success: false,
+          },
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -335,21 +433,25 @@ export default function ChatPage() {
   };
 
   const handleReserve = () => {
-    const query = `${currentPlace.name} ${currentPlace.address} 予約`;
+    const query = `${currentPlace.name} ${currentPlace.address} äºˆç´„`;
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    const itemId = createItemIdFromUrl(currentPlace.url);
+    const offerId = `reserve_${itemId}`;
+    const goUrl = buildGoUrl(offerId, googleUrl, itemId);
     sendClientLog({
-      eventType: "reservation_click",
+      event_type: "reservation_click",
       page: "/chat",
       targetUrl: googleUrl,
       metadata: {
-        item_id: createItemIdFromUrl(currentPlace.url),
+        item_id: itemId,
+        offer_id: offerId,
         place_name: currentPlace.name,
         category: currentPlace.category,
         source_url: currentPlace.url,
         official_url: currentPlace.officialUrl || null,
       },
     });
-    window.open(googleUrl, "_blank");
+    window.open(goUrl, "_blank");
     addToTaskList();
     if (currentIndex < places.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -405,12 +507,12 @@ export default function ChatPage() {
     return (
       <main className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 mb-4">確認する施設がありません</p>
+          <p className="text-gray-500 mb-4">ç¢ºèªã™ã‚‹æ–½è¨­ãŒã‚ã‚Šã¾ã›ã‚“</p>
           <button
             onClick={() => router.push("/plan")}
             className="px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold"
           >
-            プランページに戻る
+            ãƒ—ãƒ©ãƒ³ãƒšãƒ¼ã‚¸ã«æˆ»ã‚‹
           </button>
         </div>
       </main>
@@ -420,10 +522,10 @@ export default function ChatPage() {
   const currentPlace = places[currentIndex];
   const canReserve = currentPlace.category === "hotel" || currentPlace.category === "move";
   const iconMap: Record<string, string> = {
-    visit: "📍",
-    food: "🍜",
-    hotel: "🛌",
-    move: "🚃"
+    visit: "ðŸ“",
+    food: "ðŸœ",
+    hotel: "ðŸ›Œ",
+    move: "ðŸšƒ"
   };
   
   return (
@@ -435,13 +537,13 @@ export default function ChatPage() {
             onClick={saveAndReturn}
             className="text-emerald-500 font-bold"
           >
-            戻る
+            æˆ»ã‚‹
           </button>
           <button
             onClick={() => router.push("/task")}
             className="text-blue-500 font-bold"
           >
-            タスク
+            ã‚¿ã‚¹ã‚¯
           </button>
         </div>
         {/* Progress */}
@@ -482,8 +584,8 @@ export default function ChatPage() {
             )}
             <div className="mt-1 text-xs text-gray-500">
               {places.filter(p => p.category === 'hotel').length > 0
-                ? `${places.filter(p => p.category === 'hotel').length}泊${places.filter(p => p.category === 'hotel').length + 1}日`
-                : "日帰り"}
+                ? `${places.filter(p => p.category === 'hotel').length}æ³Š${places.filter(p => p.category === 'hotel').length + 1}æ—¥`
+                : "æ—¥å¸°ã‚Š"}
             </div>
           </div>
           {/* Left-Right Split */}
@@ -505,7 +607,7 @@ export default function ChatPage() {
               {currentPlace.isDisabled ? (
                 <div className="block border-2 border-gray-200 rounded-2xl p-3 bg-gray-100 opacity-60">
                   <div className="flex items-center gap-2">
-                    <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
+                    <div className="text-lg">{iconMap[currentPlace.category] || "ðŸ“"}</div>
                     <div className="flex-1">
                       <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
                       {currentPlace.address && (
@@ -516,13 +618,28 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <a
-                  href={currentPlace.url}
+                  href={buildGoUrl(
+                    `card_${createItemIdFromUrl(currentPlace.url)}`,
+                    currentPlace.url,
+                    createItemIdFromUrl(currentPlace.url)
+                  )}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() =>
+                    sendClientLog({
+                      event_type: "click",
+                      page: "/chat",
+                      targetUrl: currentPlace.url,
+                      metadata: {
+                        offer_id: `card_${createItemIdFromUrl(currentPlace.url)}`,
+                        item_id: createItemIdFromUrl(currentPlace.url),
+                      },
+                    })
+                  }
                   className="block border-2 border-gray-300 rounded-2xl p-3 bg-white hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="text-lg">{iconMap[currentPlace.category] || "📍"}</div>
+                    <div className="text-lg">{iconMap[currentPlace.category] || "ðŸ“"}</div>
                     <div className="flex-1">
                       <div style={{fontSize: '13px'}} className="font-bold">{currentPlace.name}</div>
                       {currentPlace.address && (
@@ -537,22 +654,52 @@ export default function ChatPage() {
               <div className="space-y-2">
                 {!currentPlace.isDisabled && (
                   <a
-                    href={currentPlace.url}
+                    href={buildGoUrl(
+                      `pasted_${createItemIdFromUrl(currentPlace.url)}`,
+                      currentPlace.url,
+                      createItemIdFromUrl(currentPlace.url)
+                    )}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={() =>
+                      sendClientLog({
+                        event_type: "click",
+                        page: "/chat",
+                        targetUrl: currentPlace.url,
+                        metadata: {
+                          offer_id: `pasted_${createItemIdFromUrl(currentPlace.url)}`,
+                          item_id: createItemIdFromUrl(currentPlace.url),
+                        },
+                      })
+                    }
                     className="block w-full py-3 px-4 bg-blue-500 text-white rounded-2xl text-sm font-bold hover:bg-blue-600 text-center"
                   >
-                    📋 貼り付けたURL
+                    ðŸ“‹ è²¼ã‚Šä»˜ã‘ãŸURL
                   </a>
                 )}
                 {!currentPlace.isDisabled && currentPlace.officialUrl && currentPlace.officialUrl !== currentPlace.url && (
                   <a
-                    href={currentPlace.officialUrl}
+                    href={buildGoUrl(
+                      `official_${createItemIdFromUrl(currentPlace.url)}`,
+                      currentPlace.officialUrl,
+                      createItemIdFromUrl(currentPlace.url)
+                    )}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={() =>
+                      sendClientLog({
+                        event_type: "click",
+                        page: "/chat",
+                        targetUrl: currentPlace.officialUrl,
+                        metadata: {
+                          offer_id: `official_${createItemIdFromUrl(currentPlace.url)}`,
+                          item_id: createItemIdFromUrl(currentPlace.url),
+                        },
+                      })
+                    }
                     className="block w-full py-3 px-4 bg-emerald-500 text-white rounded-2xl text-sm font-bold hover:bg-emerald-600 text-center"
                   >
-                    ✓ 修正されたURL
+                    âœ“ ä¿®æ­£ã•ã‚ŒãŸURL
                   </a>
                 )}
               </div>
@@ -562,11 +709,11 @@ export default function ChatPage() {
           {/* AI Response */}
           {isLoading ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div className="text-sm text-gray-500">考え中・・・</div>
+              <div className="text-sm text-gray-500">è€ƒãˆä¸­ãƒ»ãƒ»ãƒ»</div>
             </div>
           ) : currentPlace.isDisabled ? (
             <div className="bg-gray-100 rounded-2xl p-4">
-              <div style={{fontSize: '11px'}} className="text-gray-500">このPlaceCardはチェック済みのため機能がオフです</div>
+              <div style={{fontSize: '11px'}} className="text-gray-500">ã“ã®PlaceCardã¯ãƒã‚§ãƒƒã‚¯æ¸ˆã¿ã®ãŸã‚æ©Ÿèƒ½ãŒã‚ªãƒ•ã§ã™</div>
             </div>
           ) : currentPlace.description ? (
             <div className="bg-gray-100 rounded-2xl p-4">
@@ -581,7 +728,7 @@ export default function ChatPage() {
                   onClick={handleCheck}
                   className="w-1/4 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300"
                 >
-                  削除
+                  å‰Šé™¤
                 </button>
                 <button
                   onClick={handleReserve}
@@ -592,13 +739,13 @@ export default function ChatPage() {
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  今すぐ予約
+                  ä»Šã™ãäºˆç´„
                 </button>
                 <button
                   onClick={handleAdd}
                   className="w-1/4 py-3 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600"
                 >
-                  次へ
+                  æ¬¡ã¸
                 </button>
               </div>
             </div>
@@ -608,3 +755,4 @@ export default function ChatPage() {
     </main>
   );
 }
+

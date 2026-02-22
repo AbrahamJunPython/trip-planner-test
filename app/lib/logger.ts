@@ -26,6 +26,13 @@ const AWS_FORWARDABLE_CLIENT_EVENTS = new Set([
   "item_stage",
   "ai_consult_snapshot",
   "reservation_click",
+  "question_shown",
+  "answer",
+  "result_shown",
+  "click",
+  "kpi_first_response",
+  "ui_impression",
+  "ui_click",
 ]);
 
 type AwsLogClassification = {
@@ -59,7 +66,7 @@ function sanitizeLogEntry(entry: LogEntry): LogEntry {
     entry.message === "Client event received" &&
     typeof entry.data === "object" &&
     entry.data !== null &&
-    (entry.data as Record<string, unknown>).eventType === "ai_consult_snapshot";
+    (entry.data as Record<string, unknown>).event_type === "ai_consult_snapshot";
 
   const cloned: LogEntry = {
     ...entry,
@@ -287,9 +294,17 @@ class Logger {
     ) {
       const eventType =
         typeof entry.data === "object" && entry.data !== null
-          ? (entry.data as Record<string, unknown>).eventType
+          ? (entry.data as Record<string, unknown>).event_type
           : null;
       return typeof eventType === "string" && AWS_FORWARDABLE_CLIENT_EVENTS.has(eventType);
+    }
+
+    if (
+      entry.level === "info" &&
+      entry.context?.endpoint === "/go/[offer_id]" &&
+      entry.message === "Go redirect click recorded"
+    ) {
+      return true;
     }
 
     return false;
@@ -306,13 +321,16 @@ class Logger {
     const slowThresholdMs = parsePositiveInt(process.env.AWS_LOG_SLOW_THRESHOLD_MS, 3000);
 
     if (
-      endpoint === "/api/client-log" &&
-      message === "Client event received" &&
-      typeof data?.eventType === "string"
+      ((endpoint === "/api/client-log" &&
+        message === "Client event received" &&
+        typeof data?.event_type === "string") ||
+        (endpoint === "/go/[offer_id]" &&
+          message === "Go redirect click recorded" &&
+          typeof data?.event_type === "string"))
     ) {
       return {
         log_class: "user_event",
-        event_name: data.eventType,
+        event_name: data?.event_type as string,
         severity: entry.level,
         endpoint,
         duration_ms: durationMs,
