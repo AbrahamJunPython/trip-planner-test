@@ -83,7 +83,7 @@ export default function ChatPage() {
   const hasLoggedPageViewRef = useRef(false);
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "reservation_click";
+    event_type: "page_view" | "reservation_click";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
@@ -134,6 +134,25 @@ export default function ChatPage() {
     } catch {
       // ignore logging errors on UI path
     }
+  };
+
+  const buildGoUrl = (offerId: string, targetUrl: string, itemId: string) => {
+    const sessionId =
+      typeof window !== "undefined" ? sessionStorage.getItem("analytics_session_id") : null;
+    const userId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_user_id") : null;
+    const deviceId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_device_id") : null;
+    const flowId = typeof window !== "undefined" ? sessionStorage.getItem("plan_flow_id") : null;
+    const q = new URLSearchParams();
+    q.set("target", targetUrl);
+    if (sessionId) q.set("session_id", sessionId);
+    if (userId) q.set("user_id", userId);
+    if (deviceId) q.set("device_id", deviceId);
+    if (flowId) q.set("flow_id", flowId);
+    q.set("item_id", itemId);
+    q.set("page", "/chat");
+    return `/go/${encodeURIComponent(offerId)}?${q.toString()}`;
   };
 
   useEffect(() => {
@@ -231,7 +250,7 @@ export default function ChatPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/chat",
       metadata: {
         source: "chat_page",
@@ -337,19 +356,22 @@ export default function ChatPage() {
   const handleReserve = () => {
     const query = `${currentPlace.name} ${currentPlace.address} 予約`;
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    const itemId = createItemIdFromUrl(currentPlace.url);
+    const offerId = `reserve_${itemId}`;
     sendClientLog({
-      eventType: "reservation_click",
+      event_type: "reservation_click",
       page: "/chat",
       targetUrl: googleUrl,
       metadata: {
-        item_id: createItemIdFromUrl(currentPlace.url),
+        item_id: itemId,
+        offer_id: offerId,
         place_name: currentPlace.name,
         category: currentPlace.category,
         source_url: currentPlace.url,
         official_url: currentPlace.officialUrl || null,
       },
     });
-    window.open(googleUrl, "_blank");
+    window.open(buildGoUrl(offerId, googleUrl, itemId), "_blank");
     addToTaskList();
     if (currentIndex < places.length - 1) {
       setCurrentIndex(currentIndex + 1);

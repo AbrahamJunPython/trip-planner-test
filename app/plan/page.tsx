@@ -176,7 +176,7 @@ export default function PlanPage() {
   const selectedClass = "mt-1 w-full rounded-2xl border border-gray-200 p-3 bg-white font-bold text-emerald-500";
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "ai_consult_click" | "item_stage" | "ai_consult_snapshot";
+    event_type: "page_view" | "ai_consult_click" | "item_stage" | "ai_consult_snapshot";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
@@ -257,7 +257,7 @@ export default function PlanPage() {
     metadata?: Record<string, unknown>
   ) => {
     sendClientLog({
-      eventType: "item_stage",
+      event_type: "item_stage",
       page: "/plan",
       metadata: {
         stage,
@@ -433,7 +433,7 @@ export default function PlanPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/plan",
       metadata: {
         source: "plan_page",
@@ -1091,7 +1091,7 @@ export default function PlanPage() {
                 };
                 sessionStorage.setItem("trip_form_data", JSON.stringify(formData));
                 sendClientLog({
-                  eventType: "ai_consult_click",
+                  event_type: "ai_consult_click",
                   page: "/plan",
                   targetUrl: "/chat",
                   metadata: {
@@ -1130,7 +1130,7 @@ export default function PlanPage() {
                   };
                 });
                 sendClientLog({
-                  eventType: "ai_consult_snapshot",
+                  event_type: "ai_consult_snapshot",
                   page: "/plan",
                   targetUrl: "/chat",
                   metadata: {

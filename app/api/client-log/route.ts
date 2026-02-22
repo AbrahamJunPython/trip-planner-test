@@ -5,8 +5,9 @@ import { getClientIpHash, getDurationMs, isSlowDuration } from "@/app/lib/log-fi
 const logger = createLogger("/api/client-log");
 
 type ClientLogEvent = {
-  eventType:
+  event_type:
     | "page_view"
+    | "ui_impression"
     | "start_button_click"
     | "ai_consult_click"
     | "item_stage"
@@ -22,9 +23,10 @@ type ClientLogEvent = {
   metadata?: Record<string, unknown>;
 };
 
-function isValidEventType(value: unknown): value is ClientLogEvent["eventType"] {
+function isValidEventType(value: unknown): value is ClientLogEvent["event_type"] {
   return (
     value === "page_view" ||
+    value === "ui_impression" ||
     value === "start_button_click" ||
     value === "ai_consult_click" ||
     value === "item_stage" ||
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     const durationMs = getDurationMs(startTime);
     const clientIpHash = getClientIpHash(req);
     const receivedEventType =
-      body && typeof body.eventType === "string" ? body.eventType : null;
+      body && typeof body.event_type === "string" ? body.event_type : null;
     const metadata =
       body && typeof body.metadata === "object" && body.metadata !== null
         ? body.metadata
@@ -56,7 +58,13 @@ export async function POST(req: NextRequest) {
     const itemId =
       metadata && typeof metadata.item_id === "string" ? metadata.item_id : null;
 
-    if (!body || !isValidEventType(body.eventType) || typeof body.page !== "string") {
+    if (
+      !body ||
+      !isValidEventType(body.event_type) ||
+      typeof body.page !== "string" ||
+      typeof body.session_id !== "string" ||
+      body.session_id.trim().length === 0
+    ) {
       logger.warn("Client log request rejected", {
         duration: `${durationMs}ms`,
         duration_ms: durationMs,
@@ -74,7 +82,7 @@ export async function POST(req: NextRequest) {
     }
 
     logger.info("Client event received", {
-      eventType: body.eventType,
+      event_type: body.event_type,
       page: body.page,
       targetUrl: body.targetUrl ?? null,
       clientTimestamp: body.timestamp ?? null,

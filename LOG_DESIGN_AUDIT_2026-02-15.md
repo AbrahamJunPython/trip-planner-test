@@ -116,3 +116,29 @@
 - 現在のAWS転送は、`/api/client-log` の主要イベント + `warn/error` を中心に設計済み。
 - ただし、上記3指示を完全準拠させるには、イベント語彙の拡張と `/go` 経由設計が必須。
 
+---
+
+## Execution Plan (Current)
+
+### Strategy
+- [x] 検証ファースト（計測可能性を最優先）
+- [x] `event_type` に統一（送信・受信）
+- [x] 外部遷移を `/go/{offer_id}` 経由に統一（`chat/task/result`）
+
+### Shortest Next Steps
+1. P1未了: `ui_impression` を `result` に追加
+- [ ] `result` の主要UI表示時に `event_type` を送信
+- [ ] `offer_id / item_id / session_id` と結合可能な形で `metadata` を付与
+
+2. P2未了: `result_render_ms` を `/api/client-log` へ送信
+- [ ] `page_view` 後のレンダリング完了タイミングを計測
+- [ ] `result_render_ms` と `kpi_target_ms` を同時送信
+
+3. CloudWatch運用: 日次KPIクエリとダッシュボード
+- [ ] 2秒以内達成率（`first_response_ms` / `ttfb_ms` / `result_render_ms`）
+- [ ] クリック率（`page_view` → `reservation_click`）
+- [ ] `offer_id` 別CV（`/go` ログ基準）
+
+### Status Note
+- [x] `result` 側の `page_view` / `reservation_click` は実装済み
+- [x] `/go` 側で `offer_id x session_id x item_id` 追跡可能

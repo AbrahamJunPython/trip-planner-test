@@ -20,7 +20,7 @@ export default function TaskPage() {
   const hasLoggedPageViewRef = useRef(false);
 
   const sendClientLog = (payload: {
-    eventType: "page_view" | "reservation_click";
+    event_type: "page_view" | "reservation_click";
     page: string;
     targetUrl?: string;
     metadata?: Record<string, unknown>;
@@ -73,6 +73,25 @@ export default function TaskPage() {
     }
   };
 
+  const buildGoUrl = (offerId: string, targetUrl: string, itemId: string) => {
+    const sessionId =
+      typeof window !== "undefined" ? sessionStorage.getItem("analytics_session_id") : null;
+    const userId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_user_id") : null;
+    const deviceId =
+      typeof window !== "undefined" ? localStorage.getItem("analytics_device_id") : null;
+    const flowId = typeof window !== "undefined" ? sessionStorage.getItem("plan_flow_id") : null;
+    const q = new URLSearchParams();
+    q.set("target", targetUrl);
+    if (sessionId) q.set("session_id", sessionId);
+    if (userId) q.set("user_id", userId);
+    if (deviceId) q.set("device_id", deviceId);
+    if (flowId) q.set("flow_id", flowId);
+    q.set("item_id", itemId);
+    q.set("page", "/task");
+    return `/go/${encodeURIComponent(offerId)}?${q.toString()}`;
+  };
+
   useEffect(() => {
     const taskList = JSON.parse(sessionStorage.getItem("task_list") || "[]");
     setTasks(taskList);
@@ -82,7 +101,7 @@ export default function TaskPage() {
     if (hasLoggedPageViewRef.current) return;
     hasLoggedPageViewRef.current = true;
     sendClientLog({
-      eventType: "page_view",
+      event_type: "page_view",
       page: "/task",
       metadata: {
         source: "task_page",
@@ -156,16 +175,21 @@ export default function TaskPage() {
                     )}
                     <div className="flex gap-2 mt-3">
                       <a
-                        href={task.url}
+                        href={buildGoUrl(
+                          `task_reserve_${createItemIdFromUrl(task.url)}`,
+                          task.url,
+                          createItemIdFromUrl(task.url)
+                        )}
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => {
                           sendClientLog({
-                            eventType: "reservation_click",
+                            event_type: "reservation_click",
                             page: "/task",
                             targetUrl: task.url,
                             metadata: {
                               item_id: createItemIdFromUrl(task.url),
+                              offer_id: `task_reserve_${createItemIdFromUrl(task.url)}`,
                               task_name: task.name,
                               category: task.category,
                               address: task.address,

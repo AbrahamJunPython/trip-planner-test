@@ -59,7 +59,7 @@ function sanitizeLogEntry(entry: LogEntry): LogEntry {
     entry.message === "Client event received" &&
     typeof entry.data === "object" &&
     entry.data !== null &&
-    (entry.data as Record<string, unknown>).eventType === "ai_consult_snapshot";
+    (entry.data as Record<string, unknown>).event_type === "ai_consult_snapshot";
 
   const cloned: LogEntry = {
     ...entry,
@@ -287,7 +287,7 @@ class Logger {
     ) {
       const eventType =
         typeof entry.data === "object" && entry.data !== null
-          ? (entry.data as Record<string, unknown>).eventType
+          ? (entry.data as Record<string, unknown>).event_type
           : null;
       return typeof eventType === "string" && AWS_FORWARDABLE_CLIENT_EVENTS.has(eventType);
     }
@@ -308,11 +308,11 @@ class Logger {
     if (
       endpoint === "/api/client-log" &&
       message === "Client event received" &&
-      typeof data?.eventType === "string"
+      typeof data?.event_type === "string"
     ) {
       return {
         log_class: "user_event",
-        event_name: data.eventType,
+        event_name: data.event_type,
         severity: entry.level,
         endpoint,
         duration_ms: durationMs,

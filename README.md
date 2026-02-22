@@ -35,7 +35,7 @@
 
 ## ログ設計（現状）
 - クライアントイベントは `/api/client-log` に集約
-- `session_id`, `user_id`, `device_id`, `eventType` を送信
+- `session_id`, `user_id`, `device_id`, `event_type` を送信
 - URL単位追跡用に `item_id`、フロー追跡用に `flow_id` を利用
 - サーバーログは `app/lib/logger.ts` からAWS Lambdaへ転送可能
 - AWS転送は以下を中心に送信:

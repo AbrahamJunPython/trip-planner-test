@@ -14,7 +14,7 @@ export default function Home() {
   const hasLoggedPageView = useRef(false)
 
   const sendClientLog = (payload: {
-    eventType: 'page_view' | 'start_button_click'
+    event_type: 'page_view' | 'start_button_click'
     page: string
     targetUrl?: string
   }) => {
@@ -168,7 +168,7 @@ export default function Home() {
     if (hasLoggedPageView.current) return
     hasLoggedPageView.current = true
     sendClientLog({
-      eventType: 'page_view',
+      event_type: 'page_view',
       page: '/',
     })
   }, [])
@@ -213,7 +213,7 @@ export default function Home() {
             try {
               const url = '/plan'
               sendClientLog({
-                eventType: 'start_button_click',
+                event_type: 'start_button_click',
                 page: '/',
                 targetUrl: url,
               })

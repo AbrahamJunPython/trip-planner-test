@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { createItemIdFromUrl } from "../lib/item-tracking";
 
 type Itinerary = {
   tripName: string;
@@ -129,6 +130,85 @@ export default function ResultPage() {
   const [editedTripName, setEditedTripName] = useState("");
 
   const [fillErrors, setFillErrors] = useState<string[]>([]);
+  const hasLoggedPageViewRef = useRef(false);
+  const hasLoggedImpressionRef = useRef(false);
+  const renderStartMsRef = useRef<number | null>(null);
+
+  const createId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  const ensureId = (storage: Storage, key: string) => {
+    const existing = storage.getItem(key);
+    if (existing) return existing;
+    const created = createId();
+    storage.setItem(key, created);
+    return created;
+  };
+
+  const buildGoUrl = (offerId: string, targetUrl: string, itemId: string) => {
+    let sessionId: string | null = null;
+    let userId: string | null = null;
+    let deviceId: string | null = null;
+    let flowId: string | null = null;
+    if (typeof window !== "undefined") {
+      sessionId = ensureId(sessionStorage, "analytics_session_id");
+      userId = ensureId(localStorage, "analytics_user_id");
+      deviceId = ensureId(localStorage, "analytics_device_id");
+      flowId = sessionStorage.getItem("plan_flow_id");
+    }
+    const q = new URLSearchParams();
+    q.set("target", targetUrl);
+    if (sessionId) q.set("session_id", sessionId);
+    if (userId) q.set("user_id", userId);
+    if (deviceId) q.set("device_id", deviceId);
+    if (flowId) q.set("flow_id", flowId);
+    q.set("item_id", itemId);
+    q.set("page", "/result");
+    return `/go/${encodeURIComponent(offerId)}?${q.toString()}`;
+  };
+
+  const sendClientLog = (payload: {
+    event_type: "page_view" | "ui_impression" | "reservation_click";
+    page: string;
+    targetUrl?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    let sessionId: string | null = null;
+    let userId: string | null = null;
+    let deviceId: string | null = null;
+    let flowId: string | null = null;
+    if (typeof window !== "undefined") {
+      sessionId = ensureId(sessionStorage, "analytics_session_id");
+      userId = ensureId(localStorage, "analytics_user_id");
+      deviceId = ensureId(localStorage, "analytics_device_id");
+      flowId = sessionStorage.getItem("plan_flow_id");
+    }
+
+    const body = JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+      referrer: typeof document !== "undefined" ? document.referrer || null : null,
+      session_id: sessionId,
+      user_id: userId,
+      device_id: deviceId,
+      flow_id: flowId,
+    });
+
+    try {
+      void fetch("/api/client-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    } catch {
+      // ignore logging errors on UI path
+    }
+  };
 
   const header = useMemo(() => {
     if (!itinerary) return null;
@@ -268,6 +348,12 @@ export default function ResultPage() {
    * then immediately start Day1 fill
    ===================== */
   useEffect(() => {
+    if (renderStartMsRef.current === null && typeof performance !== "undefined") {
+      renderStartMsRef.current = performance.now();
+    }
+  }, []);
+
+  useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get("id");
     const sharedData = urlParams.get("data");
@@ -316,6 +402,53 @@ export default function ResultPage() {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (hasLoggedPageViewRef.current) return;
+    hasLoggedPageViewRef.current = true;
+    sendClientLog({
+      event_type: "page_view",
+      page: "/result",
+      metadata: {
+        source: "result_page",
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!itinerary || hasLoggedImpressionRef.current) return;
+    hasLoggedImpressionRef.current = true;
+
+    const impressionId = "result_main";
+    const kpiTargetMs = 2000;
+    const totalItems = itinerary.days.reduce((sum, day) => sum + day.items.length, 0);
+
+    const schedule =
+      typeof window !== "undefined" && "requestAnimationFrame" in window
+        ? window.requestAnimationFrame.bind(window)
+        : (cb: FrameRequestCallback) => setTimeout(cb, 0);
+
+    schedule(() => {
+      const endMs =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      const startMs = renderStartMsRef.current ?? endMs;
+      const resultRenderMs = Math.max(0, Math.round(endMs - startMs));
+
+      sendClientLog({
+        event_type: "ui_impression",
+        page: "/result",
+        metadata: {
+          impression_id: impressionId,
+          result_render_ms: resultRenderMs,
+          kpi_target_ms: kpiTargetMs,
+          trip_days: itinerary.days.length,
+          item_count: totalItems,
+        },
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itinerary]);
 
   if (!itinerary) {
     return (
@@ -498,9 +631,29 @@ export default function ResultPage() {
                               <div className="flex gap-1">
                                 {it.url ? (
                                   <a
-                                    href={it.url}
+                                    href={buildGoUrl(
+                                      `result_item_${createItemIdFromUrl(it.url)}`,
+                                      it.url,
+                                      createItemIdFromUrl(it.url)
+                                    )}
                                     target="_blank"
                                     rel="noreferrer"
+                                    onClick={() => {
+                                      const itemId = createItemIdFromUrl(it.url);
+                                      const offerId = `result_item_${itemId}`;
+                                      sendClientLog({
+                                        event_type: "reservation_click",
+                                        page: "/result",
+                                        targetUrl: it.url,
+                                        metadata: {
+                                          offer_id: offerId,
+                                          item_id: itemId,
+                                          item_title: it.title,
+                                          item_kind: it.kind,
+                                          source: "result_item_link",
+                                        },
+                                      });
+                                    }}
                                     className="w-6 h-6 flex items-center justify-center text-blue-600 hover:bg-blue-100 rounded transition-colors"
                                     title="公式URLを開く"
                                     aria-label={`${it.title}の公式サイトを開く`}
@@ -514,7 +667,22 @@ export default function ResultPage() {
                                   <button
                                     onClick={() => {
                                       const query = encodeURIComponent(`${it.title} 予約`);
-                                      window.open(`https://www.google.com/search?q=${query}`, "_blank");
+                                      const googleUrl = `https://www.google.com/search?q=${query}`;
+                                      const itemId = createItemIdFromUrl(it.url || googleUrl);
+                                      const offerId = `result_reserve_${itemId}`;
+                                      sendClientLog({
+                                        event_type: "reservation_click",
+                                        page: "/result",
+                                        targetUrl: googleUrl,
+                                        metadata: {
+                                          offer_id: offerId,
+                                          item_id: itemId,
+                                          item_title: it.title,
+                                          item_kind: it.kind,
+                                          source: "result_reserve_button",
+                                        },
+                                      });
+                                      window.open(buildGoUrl(offerId, googleUrl, itemId), "_blank");
                                     }}
                                     className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200 font-medium"
                                     aria-label={`${it.title}を予約`}
