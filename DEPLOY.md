@@ -113,3 +113,8 @@ fields @timestamp, aws_meta.log_class, context.endpoint, level
 | stats count(*) as logs by bin(1d), aws_meta.log_class, context.endpoint
 | sort bin(1d) desc
 ```
+
+## `/go` トラッキング必須ポリシー
+- 必須クエリ: `session_id`, `item_id`
+- 欠損時: `400 Bad Request` を返し、`error_code: "missing_tracking_fields"` をログ出力
+- 目的: `offer_id x session_id x item_id` の結合キーを常に保証し、予約導線分析の欠損を防ぐ
