@@ -5,20 +5,13 @@ import { getClientIpHash, getDurationMs, isSlowDuration } from "@/app/lib/log-fi
 const logger = createLogger("/api/client-log");
 
 type ClientLogEvent = {
-  event_type?:
+  eventType:
     | "page_view"
     | "start_button_click"
     | "ai_consult_click"
     | "item_stage"
     | "ai_consult_snapshot"
-    | "reservation_click"
-    | "question_shown"
-    | "answer"
-    | "result_shown"
-    | "click"
-    | "kpi_first_response"
-    | "ui_impression"
-    | "ui_click";
+    | "reservation_click";
   page: string;
   targetUrl?: string;
   timestamp?: string;
@@ -29,21 +22,14 @@ type ClientLogEvent = {
   metadata?: Record<string, unknown>;
 };
 
-function isValidEventType(value: unknown): value is ClientLogEvent["event_type"] {
+function isValidEventType(value: unknown): value is ClientLogEvent["eventType"] {
   return (
     value === "page_view" ||
     value === "start_button_click" ||
     value === "ai_consult_click" ||
     value === "item_stage" ||
     value === "ai_consult_snapshot" ||
-    value === "reservation_click" ||
-    value === "question_shown" ||
-    value === "answer" ||
-    value === "result_shown" ||
-    value === "click" ||
-    value === "kpi_first_response" ||
-    value === "ui_impression" ||
-    value === "ui_click"
+    value === "reservation_click"
   );
 }
 
@@ -54,7 +40,8 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as ClientLogEvent | null;
     const durationMs = getDurationMs(startTime);
     const clientIpHash = getClientIpHash(req);
-    const receivedEventType = body?.event_type ?? null;
+    const receivedEventType =
+      body && typeof body.eventType === "string" ? body.eventType : null;
     const metadata =
       body && typeof body.metadata === "object" && body.metadata !== null
         ? body.metadata
@@ -68,18 +55,8 @@ export async function POST(req: NextRequest) {
       (metadata && typeof metadata.flow_id === "string" ? metadata.flow_id : null);
     const itemId =
       metadata && typeof metadata.item_id === "string" ? metadata.item_id : null;
-    const sessionId = body?.session_id ?? null;
-    const normalizedEventType = isValidEventType(receivedEventType)
-      ? receivedEventType
-      : null;
 
-    if (
-      !body ||
-      !normalizedEventType ||
-      typeof body.page !== "string" ||
-      typeof sessionId !== "string" ||
-      sessionId.trim().length === 0
-    ) {
+    if (!body || !isValidEventType(body.eventType) || typeof body.page !== "string") {
       logger.warn("Client log request rejected", {
         duration: `${durationMs}ms`,
         duration_ms: durationMs,
@@ -97,12 +74,12 @@ export async function POST(req: NextRequest) {
     }
 
     logger.info("Client event received", {
-      event_type: normalizedEventType,
+      eventType: body.eventType,
       page: body.page,
       targetUrl: body.targetUrl ?? null,
       clientTimestamp: body.timestamp ?? null,
       referrer: body.referrer ?? null,
-      sessionId,
+      sessionId: body.session_id ?? null,
       userId: body.user_id ?? null,
       deviceId: body.device_id ?? null,
       metadata: body.metadata ?? null,
